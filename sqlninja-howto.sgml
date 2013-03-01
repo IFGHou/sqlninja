@@ -1,0 +1,854 @@
+<!doctype linuxdoc system>
+<article>
+<title>Sqlninja user manual
+<author>
+<name>
+<date>rel. svn
+<abstract>
+This is the user manual of sqlninja, and you should have received it with the sqlninja tarball. Check <url url="http://sqlninja.sourceforge.net"> for the latest version.
+</abstract> 
+
+<toc>
+
+<sect>Introduction
+<p>Sqlninja's goal is to exploit SQL injection vulnerabilities on web applications that use Microsoft SQL Server as back end. It is released under the <url name="GPLv3" url="http://www.gnu.org/licenses/gpl.html">.
+
+Sqlninja's main goal is to get interactive OS-level access on the remote DB server and to use it as a foothold in the target network. As an experimental feature, it can also extract data from the database. In a nutshell, here's what it does:
+<itemize>
+<item>Fingerprint of the remote SQL Server (version, user performing the queries, user privileges, xp_cmdshell availability, DB Server authentication mode)
+<item>Bruteforce of the 'sa' password (SQL Server 2000 only)
+<item>Privilege escalation to 'sa' (SQL Server 2000 only)
+<item>Creation of a custom xp_cmdshell if the original one has been disabled
+<item>Upload of executables
+<item>Reverse scan in order to look for a port that can be used for a reverse shell
+<item>Direct and reverse shell, both TCP and UDP
+<item>DNS tunneled pseudoshell, when no ports are available for a bindshell
+<item>ICMP tunneled shell, if the target DBMS can communicate via ICMP Echo with the attacking machine
+<item>Metasploit wrapping, when you want to use Meterpreter or even want to get GUI access on the remote DB server
+<item>OS privilege escalation on the remote DB server using token kidnapping or through CVE-2010-0232 
+<item>Extraction of data from the remote DB, using WAITFOR-based inference or DNS-based tunnels 
+<item>All of the above can be done with obfuscated SQL code, in order to confuse IDS/IPS systems
+</itemize>
+As you probably have figured out, sqlninja does not look for SQL injection vulnerabilities. Again, there are already several tools that perform that task already, like <url url="http://portswigger.net/suite" name="BurpSuite">.
+
+For the latest release and two flash demos, check out the address <url url="http://sqlninja.sourceforge.net" name="http://sqlninja.sourceforge.net">. The demos refer to a previous version but are still perfectly good to get a better understanding of the tool.
+
+Read this manual carefully (yes, I mean all of it), as it will explain you what it is all about and how to make your way through all sqlninja options. Yes, I know that it's terribly long and boring, but since sqlninja has a plethora of options to play with (and no shiny green buttons), try to read the whole thing: it will help you to get the most of the tool and will save you a lot of time later.
+
+<sect1>Requirements
+<p>Since sqlninja is completely written in Perl, there is not much to install, except Perl itself and the following modules, if missing:
+<itemize>
+<item>NetPacket
+<item>Net-Pcap
+<item>Net-DNS
+<item>Net-RawIP
+<item>IO-Socket-SSL
+<item>Net-Pcap
+<item>DBI
+</itemize>
+You will also need the Metasploit Framework 3 on your box to use the metasploit attack mode, and also a VNC client if you use the VNC payload.
+<p>
+If something goes wrong, activating verbose output (<tt>-v</tt> option) and/or debugging (<tt>-d</tt>) should provide some hints. Developed on a Gentoo box, sqlninja has been reported to work on the following operating systems:
+<itemize>
+<item>Linux
+<item>FreeBSD
+<item>Mac OS X
+<item>iOS 
+</itemize>
+
+<sect1>Background<label id="background_">
+<p>Sometimes, when you find a SQL Injection vulnerability in a web application which uses SQL Server, it is all 2001 again: you find that your queries are run as 'sa', you verify that xp_cmdshell has not been disabled, then you make the server download netcat (via ftp or tftp) and finally obtain your direct or reverse shell. Most of the time, however, things are different: maybe the firewall filters all inbound/outbound connections, or a reverse shell is only allowed on some obscure service, or xp_cmdshell isn't there, or your queries are executed with low privileges. Or maybe all these things together ;). Sqlninja offers some help in getting the deserved remote shell even in these cases. And if that fails, it can still help you to squeeze some data out of the remote DBMS.
+
+I am assuming that you have a good grasp of SQL Injection techniques and of Microsoft SQL Server internals. If you have trouble understanding what follows, I recommend you that you read <url url="http://www.northernfortress.net/advanced_sql_injection.pdf" name="this">, <url url="http://www.northernfortress.net/more_advanced_sql_injection.pdf" name="this"> and <url url="http://www.northernfortress.net/sqlinference.pdf" name="this">. I am also assuming you understand what protocol tunneling is, in particular over ICMP and DNS. If you don't, a good introduction to the concept for DNS is <url url="http://dnstunnel.de/" name="here">. 
+
+<sect1>How to use it
+<p>Sqlninja's behaviour is controlled via the <ref id="conf_" name="configuration file"> (default: <tt>sqlninja.conf</tt>), which tells sqlninja what to attack and how (target host, vulnerable page, exploit strings, ...), and some command line options, which tell sqlninja what action to perform. These command line options are the following:
+<itemize>
+<item><bf>-m &lt;attack mode&gt; :</bf> specifies the attack mode. Basically, tells sqlninja what to do. Possible values are:
+<itemize>
+<item>test
+<item>fingerprint
+<item>bruteforce
+<item>escalation
+<item>resurrectxp
+<item>upload
+<item>dirshell
+<item>backscan
+<item>revshell
+<item>dnstunnel
+<item>icmpshell
+<item>metasploit
+<item>sqlcmd
+<item>getdata
+</itemize>
+<item><bf>-v :</bf> verbose output
+<item><bf>-f &lt;configuration file&gt; :</bf> specifies a configuration file to use.
+<item><bf>-p &lt;'sa' password&gt; :</bf> used in escalation mode to add current DB user to the sysadmin group, and in other modes to run the query as administrator, if the DB user does not belong to such group. This option is rarely used, as <ref id="bruteforce_" name="bruteforce mode"> by default adds the DB user to the sysadmin group when the 'sa' password is found. For more information about when to use this parameter, refer to the <ref id="escalation_" name="escalation mode">
+<item><bf>-w &lt;wordlist&gt; :</bf> wordlist to use in bruteforce mode
+<item><bf>-g :</bf> combined with upload mode, generate debug script and exit
+<item><bf>-d &lt;debug mode&gt; :</bf> activates debug, to see what is going on under the hood. Possible values are:
+<itemize>
+<item>1 : print each SQL command that is being injected
+<item>2 : print each HTTP request that is sent to the target
+<item>3 : print each HTTP response that is received from the target
+<item>all : all of the above
+</itemize>
+</itemize>
+See the description of the various modes to see when each parameter must be used.
+
+<sect>Attack modes
+<p>Sqlninja has currently 14 attack modes. The mode to use can be specified by its name:
+<tscreen>
+sqlninja -m upload
+</tscreen>
+or by its shortcut:
+<tscreen>
+sqlninja -m u
+</tscreen>
+The list with the available modes and their corresponding shortcuts can be retrieved by launching sqlninja with no parameters.
+
+To get a first grasp of the different attack modes, here's a typical way of using sqlninja:
+<enum>
+<item> Setup the configuration file, and use <ref id="test_" name="test mode"> to check that SQL code is being correctly injected
+<item> Fingerprint the remote DB server, using <ref id="finger_" name="fingerprint mode">
+<item> If needed, use <ref id="bruteforce_" name="bruteforce mode"> to find the 'sa' password and escalate privileges (SQL Server 2000 only)
+<item> If needed, use <ref id="resurrectxp_" name="resurrectxp mode"> to re-create the xp_cmdshell extended procedure (SQL Server 2000 only)
+<item> Upload netcat, using <ref id="upload_" name="upload mode">
+<item> If it is possible to contact the DB Server on some port, use <ref id="dirshell_" name="dirshell mode"> and get a direct shell. Alternatively, if the port is TCP, use <ref id="metasploit_" name="metasploit mode"> to get graphical access
+<item> Otherwise, use <ref id="backscan_" name="backscan mode"> to find an allowed "outbound" tcp/udp port
+<item> If step 7 is successful, use <ref id="revshell_" name="revshell mode"> to obtain a reverse shell. Alternatively, if the port is TCP, use <ref id="metasploit_" name="metasploit mode"> to get graphical access
+<item> If step 8 failed, upload icmpsh.exe and try <ref id="icmpshell_" name="icmpshell mode"> to obtain an icmp-tunneled shell 
+<item> If step 9 failed, upload dnstun.exe and start <ref id="dnstunnel_" name="dnstunnel mode"> to obtain a dns-tunneled pseudo-shell
+<item> If step 10 failed, crank up <ref id="getdata_" name="getdata"> mode and start extracting some tables!
+</enum>
+
+<sect1>test<label id="test_">
+<p> 
+<itemize>
+<item>Shortcut: t 
+<item>Parameters: none
+</itemize>
+This mode simply injects a simple <tt>WAITFOR DELAY</tt> and checks whether it is successfully executed by the remote server. Use this mode to test whether your configuration file is correct and the injection is working.
+<sect1>fingerprint<label id="finger_">
+<p>
+<itemize>
+<item>Shortcut: f 
+<item>Parameters: -p &lt;sa password&gt; (optional)
+</itemize>
+Using WAITFOR-based blind injection, this mode fingerprints the remote server. The following pieces of information can be obtained:
+<itemize>
+<item>Database version (2000/2005/2008/2012) 
+<item>User that is performing the queries
+<item>Whether that user belongs to the sysadmin group 
+<item>Whether xp_cmdshell is available to that user
+<item>Whether the remote server uses mixed or Windows-only authentication (you need to know this if you want to bruteforce the 'sa' password)
+<item>Whether the remote SQL Server runs as SYSTEM. This can also be used to check whether <ref id="usechurrasco_" name="churrasco.exe"> has been correctly uploaded and is able to escalate privileges through token kidnapping.
+<item>Name of current DB
+</itemize>
+
+If you are attacking SQL Server 2000, the current DB user does not belong to the sysadmin group, but the right 'sa' password is specified as a parameter, the fingerprint is performed with administrative rights. The WAITFOR technique is much slower compared to other inference methods, but it's by far the most flexible. However, since external factors like network traffic and server load could interfere with the time measurements, you might want to repeat the fingerprint a couple of times, if the first result doesn't look right, or play with the <tt>blindtime</tt> parameter in the <ref id="conf_" name="configuration file">. Note that in order to use fingerprint the user running SQL Server the following must be available on the remote box:
+<itemize>
+<item>xp_cmdshell (or an equivalent procedure)
+<item><tt>whoami.exe</tt>. This is present by default on Windows 2003, but if you suspect that this utility is not on the remote box, just download it from microsoft.com and <ref id="upload_" name="upload"> it.
+</itemize>
+
+<sect1>bruteforce<label id="bruteforce_">
+<p>
+<itemize>
+<item>Shortcut: b
+<item>Parameters: -w &lt;wordlist&gt; (optional)
+</itemize>
+<p>This mode is to be used if the user that performs the queries does not belong to the sysadmin group (see <ref id="finger_" name="fingerprint mode">). If this is the case, we need to escalate our privileges. Since by using OPENROWSET we can make the target database connect to itself with alternate credentials, we can attempt to bruteforce the 'sa' password. If the correct password is found, current user is automatically added to the sysadmin group. For this attack to work, the remote SQL Server must use "mixed authentication". Use <ref id="finger_" name="fingerprint mode"> to check if this is the case.
+
+This attack mode can use two different methods: "dictionary" and "incremental". You are free to use the method that best suits your needs. 
+
+<sect2>Dictionary
+<p>This method is used when a wordlist is specified, using the <tt>-w</tt> option. Using this method, potential passwords are fetched from the wordlist, and each one is tried in a separate request. Be sure that your wordlist contains 'sa' and the empty password, two all-times favourites for MS SQL Server installations.
+
+Pros: 
+<itemize>
+<item>Very effective if the password is a dictionary word 
+<item>Does not put a heavy load on the DB Server 
+</itemize>
+Cons: 
+<itemize>
+<item>Not effective against passwords that are not dictionary based. If the password is not in your wordlist, you are out of the game
+<item>Needs a lot of network connections, so the attack is very easy to spot by looking at the logs of the web server
+</itemize>
+
+<sect2>Incremental
+<p>This method is used when a wordlist is not specified. Sqlninja submits a set of queries that try *ALL* possible combinations of characters up to a certain length that is specified by the user. The cool aspect of this tactic is that since the queries run on the DB server, the bruteforce is actually performed using the target's CPU resources.
+
+Pros:
+<itemize>
+<item>Extremely effective in finding passwords that are not dictionary based
+<item>Needs relatively few connections, so there are very few entries in the web server logs 
+</itemize>
+
+Cons:
+<itemize>
+<item>If the password is long, it might take ages
+<item>It might push the CPU usage of the DB Server up to 100% for the whole time, which can be dangerous with a live application. Also keep in mind that critical servers have alarms that are triggered if the CPU usage remains very high for a certain time. As a security measure, sqlninja splits the task in small chunks (each chunk trying <it>n&sup3;</it> passwords, with <it>n</it> being the length of the charset used). If something goes wrong, just stop sqlninja, and the remote bruteforce will stop at the end of the current chunk 
+<item>Depending on how the application connects to the DB Server, this technique might not work (e.g.: ODBC is known to create trouble). Sqlninja tries to figure it out almost immediately and alerts the user, so no precious time is lost
+</itemize>
+
+<sect2>Important notes
+<p>
+<itemize>
+<item>Starting with SQL Server 2005, OPENROWSET is disabled by default for non-administrative users. If the fingerprint mode told you that you are dealing with SQL Server 2005/2008/2012 and that you are not 'sa', then you are likely out of luck (but you can still extract data with the <ref id="getdata_" name="getdata"> mode
+<item>In SQL Server 2000, passwords are case insensitive, which massively simplifies the cracking job.
+<item>The escalation bit might be impacted if the application uses ODBC (see <ref id="escalation_" name="escalation mode">)
+</itemize>
+
+<sect1>escalation<label id="escalation_">
+<p>
+<itemize>
+<item>Shortcut: e 
+<item>Parameters: -p &lt;sa password&gt; (required)
+</itemize>
+When the correct 'sa' password is specified, the current DB user is added to the sysadmin group. 
+
+In general, you should not need this method, as sqlninja takes care of the escalation in the bruteforce mode already. However, there might be cases in which you need to perform this bit independently (maybe you found the password with a social engineering attack).
+
+If you want to know how the escalation works, or if you have found the 'sa' password but the escalation seems not to work, keep reading. Otherwise, you can skip to <ref id="resurrectxp_" name="resurrectxp mode">.
+
+The escalation is performed combining OPENROWSET, the right 'sa' password, and sp_addsrvrolemember, by adding the current DB user to the sysadmin group. It is quite unlikely that sp_addsrvrolemember has been disabled, so the trick should work pretty much always. If it doesn't work, there might be 2 cases:
+<enum>
+<item>The server uses ODBC, and you are using old ODBC connections from the connection pool, which still use the old privileges
+<item>The sp_addsrvrolemember procedure has been disabled
+</enum>
+In the first case, you can just have a couple of pints waiting for the old ODBC connection to timeout and be dropped: by default, an ODBC connection is dropped after 60 idle seconds, and the chance of such an event depends on how many clients are connecting to the web application and how this number varies over time.
+
+In the second case (or also in the first, if you don't want to wait), you only need to specify the <tt>-p &lt;sa password&gt;</tt> parameter in <it>all</it> the following steps of the attack: that will tell sqlninja to use OPENROWSET in each connection, running each command as 'sa' rather than as the current user. 
+
+
+
+<sect1>resurrectxp<label id="resurrectxp_">
+<p>
+<itemize>
+<item>Shortcut: x
+<item>Parameters: -p &lt;sa password&gt; (optional)
+</itemize>
+This mode is to be used when the following conditions are both met:
+<itemize>
+<item>We have sysadmin privileges or we know the 'sa' password 
+<item>xp_cmdshell has been disabled
+</itemize>
+The goal of this mode is, of course, to recreate the xp_cmdshell extended procedure. There are quite a lot of variables that come to play here and depending on them this mode will behave in different ways. So read carefully, as here are the things you must keep in mind: 
+<itemize>
+<item><bf>The methods:</bf> there are two ways to get the xp_cmdshell back: 
+<enum>
+<item>restore it with a stored procedure (sp_addextendedproc on SQLServer 2000 and sp_configure on SQLServer 2005). This method requires one simple SQL command, but requires xplog70.dll to still be there
+<item>create a custom one with "CREATE PROCEDURE", sp_oacreate, sp_oamethod and sp_oadestroy. This method requires more code, but works no matter if xplog70.dll has been removed for security reasons.
+</enum>
+<item><bf>The xp_cmdshell name:</bf> re-enabling xp_cmdshell might not go unnoticed. Or maybe the application developers might have strictly followed what MS recommends, which is to filter the "xp_*" string, without saying nothing about "sp_*" (check <url url="http://msdn.microsoft.com/library/en-us/bldgapps/ba_highprog_11kk.asp">). In these cases, we can use CREATE PROCEDURE and a more discrete name (e.g.: "sp_sqlbackup"). You can choose the procedure name with the <ref id="xp_name_" name="xp_name option"> of the configuration file. 
+<item><bf>The user privileges:</bf> if the privilege escalation didn't work (see <ref id="escalation_" name="escalation mode"> for the possible reasons), then you must use the <tt>-p &lt;sa password&gt;</tt> parameter, in order to use OPENROWSET to escalate privileges in each connection, and this leads to the following point
+<item><bf>OPENROWSET and CREATE PROCEDURE cannot be combined.</bf> Therefore, if you are using the <tt>-p</tt> parameter you cannot use the "CREATE PROCEDURE" trick. However, there is a workaround: you can include the whole procedure code <it>in each request</it> that is sent to the DB Server, without creating an extended procedure at all. Let's call this trick <bf>"inline procedure injection"</bf>.
+</itemize>
+That said, here are the steps that sqlninja follows when this method is used:
+<enum>
+<item>If the extended procedure name, specified in the configuration file, is <tt>xp_cmdshell</tt> (which is the default value), then sqlninja starts by trying to re-enable it with sp_addextendedproc/sp_configure. You will be asked the version of the remote SQL Server. If you forgot to use fingerprint mode, sqlninja will find this info on its own. If this whole thing works, we have our xp_cmdshell back.
+<item>If the extended procedure name is not set to <tt>xp_cmdshell</tt> (maybe because you want to be more sneaky) in the configuration file, or step #1 has failed (e.g.: because xplog70.dll has been removed), then: 
+
+<itemize>
+<item>if we have native admin privileges (meaning we didn't have to specify the password in the command line) the CREATE PROCEDURE method is attempted. If it works, we have our custom procedure, whatever we have named it 
+<item>if we do not have native admin privileges (meaning we had to specify the password in the command line) the inline procedure injection is tried. If it works, then you will have to set xp_name to <tt>NULL</tt> in the configuration file. This will tell sqlninja to use the inline procedure injection in all subsequent steps
+</itemize>
+</enum>
+I hope it is clear. If it is, you should not have any problem in having back your xp_cmdshell (or something perfectly equivalent) in almost every situation. If it is not clear, I am afraid you will have to read the whole thing again.
+
+Note: the code used by sqlninja for the custom procedure is a slight modification of Antonin Foller's code, that you can find at the address <url url="http://www.motobit.com/tips/detpg_cmdshell/">
+
+<sect1>upload<label id="upload_">
+<p>
+<itemize>
+<item>Shortcut: u 
+<item>Parameters: -p &lt;sa password&gt; (optional)
+<item>Parameterd: -g (optional)
+</itemize>
+This mode uploads a binary file using only GET or POST HTTP requests to the web server, so no FTP/TFTP or whatever other connection is needed. The file is uploaded to the directory specified by the server's <tt>%TEMP%</tt> variable, so that the attack works even when MSSQL cannot write on the default directory (which seems to be sometimes the case with MSDE). There are two upload methods available, controlled by the <ref id="uploadmethod_" name="upload_method"> option:
+<itemize>
+<item><bf>debug script:</bf> This method is the traditional one, and uses the old <tt>DEBUG.EXE</tt> 16bits debugger. The binary file is encoded as a debug script (<tt>.scr</tt> extension) the script is uploaded and feeded to the debugger. The script basically allocates an area of memory, writes the needed bytes in it, and saves the result to disk. Being a 16bits debugger there is obviously a 64k bytes limitation in the size, but sqlninja bypasses it by splitting the original executable in chunks of 64k bytes, uploading them separately, and then finally merging them together. Sqlninja uses the same algorithm used in Jussi's great dbgtool.exe (which you can find at the address http://www.toolcrypt.org) which is capable of creating very compact scripts.
+<item><bf>vbscript:</bf> This is the new method: basically, it encodes the binary file in base64 format, uploads it, and then feeds it to a tiny vbscript decoder previously uploaded. On average it uses fewer requests, it does not need to split the original file, and has higher chances to work on recent systems. Therefore, although the old method is much cooler with the debug trick and everything, you should probably just use this one.
+</itemize>
+
+No matter what method you select for the upload, you will be prompted for the file name to upload and things will be completely automated. If the file appears to be already in <tt>.scr</tt> or <tt>.base64</tt> format, sqlninja will perform the upload anyway, but some checks (e.g.: the uploaded binary file has the correct size) will not be possible. In general, it is always better to provide sqlninja with the original binary.
+
+<p>
+For your comfort, netcat.exe, dnstun.exe, icmpsh.exe, churrasco.exe, vdmallowed.exe and vdmexploit.dll are already available in the <tt>apps</tt> and <tt>scripts</tt> directories, respectively in binary and debug+base64 format. The executables have been packed with <url url="http://upx.sourceforge.net" name="UPX"> in order to minimize their size (and the upload time). You need to upload netcat to use backscan/dirshell/revshell, whereas dnstun.exe and icmpsh.exe are used to create a DNS and ICMP tunneled pseudoshell respectively. Churrasco.exe is used to attempt a privilege escalation via token kidnapping if SQL Server is not running as SYSTEM. Vdmallowed.exe and vdmexploit.dll attempt the same attack using CVE-2010-0232. 
+
+Keep in mind that a lot of things can go wrong here: if a single line of the encoded file fails to get uploaded, the executable will not be correctly generated. Therefore, at the end of the process sqlninja checks whether the executable file is there, and if it is not it also tries to figure out how many lines have been uploaded: this should provide some hints on what went wrong. For instance, during a pen-test it turned out that the resulting number of lines was exactly twice the correct value, meaning that each injected query was executed twice. The trick was to create a temporary table that acted as a counter, appending the line to the script file only when the counter was even.
+
+If you only want to generate the debug script or the base64 file without uploading it (for instance to use it with some other tool), start the upload mode with the <tt>-g</tt> option, and sqlninja will generate the file in the <tt>/tmp</tt> directory and exit.  You need to specify the password parameter when you do not have native sysadmin privileges (see <ref id="escalation_" name="escalation mode">).
+
+<sect1>dirshell<label id="dirshell_">
+<p>
+<itemize>
+<item>Shortcut: s 
+<item>Parameters: -p &lt;sa password&gt; (optional)
+</itemize>
+Use this method when the remote DB Server is directly reachable on some TCP or UDP port. Sqlninja asks for the remote port, the protocol, tells the DB server to bind a command prompt to such port and then starts the connection. Of course, netcat must have been uploaded on the remote server. The password parameter is to be used when we do not have native sysadmin privileges (see <ref id="escalation_" name="escalation mode">).
+
+<sect1>backscan<label id="backscan_">
+<p>
+<itemize>
+<item>Shortcut: k
+<item>Parameters: -p &lt;sa password&gt; (optional) 
+</itemize>
+Tipically, when the DB Server is behind a firewall it is not possible to directly contact it. However, it might be possible that the server is allowed to access the outside world on some port (e.g.: DNS, HTTP). This mode tells the DB Server to send SYN packets or UDP packets to our machine on a range of ports, in order to look for one that is allowed. Sqlninja will tell the user whether packets are received and on which port(s). 
+
+You need to specify, in the configuration file, the IP address of your machine (
+<ref id="lhost_" name="lhost parameter">) and the interface to listen on  
+(<ref id="device_" name="device parameter">).
+Sqlninja will ask you about the protocol to use (TCP/UDP) and for the ports, that must be 
+specified with the common netcat syntax (e.g.: "23 25 80-100" will try ports 23,
+ 25 and all ports between 80 to 100).
+The password parameter is to be used when 
+we do not have native sysadmin privileges (see <ref id="escalation_" name="escalation">). In order to use this mode, netcat must have been uploaded first, and since pcap libraries need to be used you also need to be root.
+
+<sect1>revshell<label id="revshell_">
+<p>
+<itemize>
+<item>Shortcut: r 
+<item>Parameters: -p &lt;sa password&gt; (optional) 
+</itemize>
+If a direct shell is not possible but backscan mode found an open port from the DB Server to our machine, then a reverse shell is possible. When using this mode, sqlninja asks for the local port, the protocol and then starts the connection. You need to specify, in the configuration file, the IP address of your machine (<ref id="lhost_" name="lhost parameter">). Of course, netcat must have been uploaded on the remote server. As usual, the password parameter is to be used when we do not have native sysadmin privileges (see <ref id="escalation_" name="escalation mode">).
+
+<sect1>icmpshell<label id="icmpshell_">
+<p>
+<itemize>
+<item>Shortcut: i
+<item>Parameters: -p &lt;sa password&gt; (optional)
+</itemize>
+When no direct or reverse shell are allowed by the firewall, but the remote DBMS can ping our box, we can tunnel our shell into an ICMP tunnel. Just <ref id="upload_" name="upload"> icmpsh.exe, start icmpshell mode, and enjoy your shell. All the traffic from and to the remote DBMS will be tunneled through ICMP packets.
+
+When starting this attack mode, sqlninja will ask the following information:
+<itemize>
+<item>Data buffer size: the amount of data that will be encapsulated into a single ICMP packet. The default is 64 bytes, but you can use larger values to obtain a faster tunnel. Just be careful to the maximum MTU (Maximum Transfer Unit) between you and the DBMS. A value up to 1300-1400 bytes should be considered, by today's standards, fairly reliable. Use smaller packets if you want to play safe
+<item>Send delay: the amount of time between contiguous ICMP Echo requests. The default is 300 milliseconds, but you can use lower values to obtain a faster tunnel. Keep in mind that a very low value might generate a ping flood that might be noticed, or automatically throttled down by some anti-DoS device between you and your target.
+<item>Response timeout: the amount of time that will be waited by icmpshell.exe before re-sending an ICMP request. The default is 3000 milliseconds
+</itemize>
+<bf>Important:</bf> make sure that your box is configured to <bf>not</bf> respond to ICMP Echo requests. For instance, on Linux the following command will do the trick:
+
+<tt>
+sysctl -w net.ipv4.icmp_echo_ignore_all=1
+</tt>
+
+<sect1>dnstunnel<label id="dnstunnel_">
+<p>
+<itemize>
+<item>Shortcut: d
+<item>Parameters: -p &lt;sa password&gt; (optional)
+</itemize>
+When no direct or reverse shell are allowed by the firewall, and the ICMP shell does not work either, we can try to establish a DNS tunnel. The only requirements are:
+<itemize>
+<item>The DB server must be able to resolve external hostnames (which is very often the case)
+<item>Our IP must be the authoritative DNS server of some domain (you can buy one for a few bucks). We will use <tt>sqlninja.net</tt> in our example
+</itemize>
+If both conditions are met, <ref id="upload_" name="upload"> dnstun.exe, start dnstunnel mode, and launch your commands. What happens is more or less the following: 
+<enum>
+<item>The command is passed via SQL Injection to dnstun.exe (which acts as our remote agent) and is executed by the remote DB Server. The output is intercepted and encoded in a slightly modified <url url="http://en.wikipedia.org/wiki/Base_32" name="base32"> format 
+<item>The encoded output is split in a series of hostnames of the domain we control (e.g.: <tt>encoded_output.sqlninja.net</tt>) 
+<item>Those hostnames are passed to <tt>gethostbyname()</tt>, so that the DB server contacts its DNS Server to resolve them 
+<item>The DNS Server looks for the authoritative server of sqlninja.net (our IP) and forwards the requests to our workstation 
+<item>sqlninja receives the requests, re-orders them if necessary, decodes the hostnames and finally prints the command output. Of course, sqlninja also responds to the DNS requests (with a fake IP address) in order to make <tt>gethostbyname()</tt> quickly return.
+</enum>
+
+The whole process is streamed, which means that if the command output is very long you will start seeing its output before the command has finished. 
+
+The domain to use must be specified in the <ref id="domain_" name="configuration file">. Of course, since sqlninja must create a fake DNS server and bind port 53, you need root privileges to use this mode. Keep in mind that DNS uses UDP, so packet loss might be an issue, here. 
+
+The executable version of the agent has been compiled with <url url="http://www.mingw.org" name="Msys">. As always, the password parameter is to be used when we do not have native sysadmin privileges (see <ref id="escalation_" name="escalation mode">).
+
+<sect1>metasploit<label id="metasploit_">
+<p>
+<itemize>
+<item>Shortcut: m
+<item>Parameters: none
+</itemize>
+Not happy with a simple DOS prompt? Want to impress your friends with a full GUI access? If you have administrative privileges, xp_cmdshell works and you have found an allowed TCP port (either inbound or outbound), you can also use sqlninja as a wrapper for Metasploit, in order to either use Meterpreter or inject a VNC server. Think of Meterpreter as a DOS prompt but far more powerful, providing you with an almost complete control over the remote OS, including immediate access to password hashes, the possibility of changing routing tables, perform port forwarding and even more. Alternatively, if you have enough bandwidth, you can also inject a VNC server and be provided with a nice graphical access to the remote DB.
+
+This attack mode is fully automated, and in a nutshell here's what happens:
+<enum>
+<item>Sqlninja asks you to specify if you want to use Meterpreter or VNC, whether the connection will be direct or inverse, and the host/port to connect to (or local port to bind, in case of a reverse connection)
+<item>Sqlninja will call <tt>msfpayload</tt> to create an appropriate executable that will act as a stager
+<item>Sqlninja will then convert it to a debug script and upload it
+<item>Since we will need to inject a DLL, we might need to disable Data Execution Prevention (aka 'DEP', enabled by default starting from Windows 2003 SP1) on the remote box. Recent versions of Metasploit handle this bit automatically, but you can also tell sqlninja will try to do it for you, by accessing the registry and whitelisting our executable (see the <tt>checkdep</tt> parameter)
+<item>Finally, Sqlninja will call <tt>msfcli</tt> to inject the needed DLL and complete the exploitation
+</enum>
+
+You can watch a flash demo of this attack on the sqlninja website.
+
+Of course, in order to use this attack mode you need to have Metasploit3 available on your box. If Metasploit executables (namely <tt>msfpayload</tt>, <tt>msfcli</tt> and <tt>msfencode</tt>) are not in your path, you can specify their absolute location in the configuration file. Also, if you use the VNC mode, be sure to have a VNC client installed.
+
+<sect1>sqlcmd<label id="sqlcmd_">
+<p>
+<itemize>
+<item>Shortcut: c
+<item>Parameters: none
+</itemize>
+Sometimes, even if we have sysadmin privileges and xp_cmdshell works, it is still not possible to get a shell, maybe because the executable upload fails, or because ports are all filtered and external DNS resolving is not allowed. In these cases, it can still be useful to issue single commands to the DB server, even without being able to see the output. For instance, you might want to add a local user (maybe you can RDP to the box), or a domain user, if SQL Server runs with such privileges (yes, it happens more often than one would expect). In such cases, you can use this mode: simply enter a DOS command and let sqlninja execute it remotely. Just remember: it gets executed even if you don't see its output. 
+
+Of course, you can still use timing to know what is going on:
+<tscreen>
+if exist filename (ping -n 5 127.0.0.1)
+</tscreen>
+If the command takes around 5 seconds to execute, the file is there.
+
+To know whether a command succeeded, also check the value of the ERRORLEVEL variable, which is usually set to 0 if the last command did not produce an error. So, for instance, if we want to know whether the remote SQL Server is running as SYSTEM, we can use the following command:
+<tscreen>
+whoami > who.txt & find /i "\system " who.txt & if not errorlevel = 1 ping -n 5 127.0.0.1 & del who.txt
+</tscreen>
+If the command takes around 5 seconds to execute, you know that SQL Server is running as SYSTEM (<tt>whoami.exe</tt> is installed by default on Windows 2003 and can be found on Windows 2000 if the Resource Kit has been installed). Refresh your DOS-shaolin skills and use your fantasy: from appending commands in <tt>AUTOEXEC.BAT</tt> to starting/stopping services and adding rogue users, you can get pretty far with this!
+
+This mode can also be useful when some other mode fails, in order to understand what went wrong and how to fix the problem. Finally, this command is also very useful to show a client that you owned their DB server even if you didn't get the shell:
+<tscreen>
+echo You have been owned by sqlninja > c:\sqlninja.txt
+</tscreen>
+
+<sect1>getdata<label id="getdata_">
+<p>
+<itemize>
+<item>Shortcut: g
+<item>Parameters: -s &lt;filename&gt; (optional)
+</itemize>
+Let us start by pointing out that this is still very experimental, it is likely to contain more bugs than a Win95 beta, and therefore you should not expect its reliability to be bomb-proof.
+With that out of the way, let's get down to business: this module is 100% interactive, so it should be fairly intuitive. Sqlninja currently supports two extraction channels, <bf>time-based</bf> and <bf>DNS-based</bf>, described below. 
+
+<sect2>Time-based<label id="timedata_">
+<p>
+This channel is used when <tt><ref id="data_channel_" name="data_channel"></tt> is set to <tt>time</tt> in the configuration file, and uses the slow but reliable WAITFOR DELAY command to extract information. Sqlninja can exploit time-based injection in two ways, detailed in the following paragraphs.
+
+<p><bf>Time-based binary search</bf><label id="timedatabinary_">
+<p>
+This method is activated when <tt><ref id="data_extraction_" name="data_extraction"></tt> is set to <tt>binary</tt> in the configuration file. If you are even marginally into computers, you should know how a binary search algorithm works, so we am not going to get much into detail here. Basically, this method minimizes the number of requests to the application, which makes it useful if you want to keep your footprint to a minimum. However, approximately half of the queries will trigger a delay, which means that this method might not be the fastest.
+
+<p><bf>Time-based serial/optimized search</bf><label id="timedatabinary_">
+<p>
+This method is activated when <tt><ref id="data_extraction_" name="data_extraction"></tt> is set to <tt>optimized</tt> (default) or <tt>serial</tt> in the configuration file. With this method, all possible values are tried in sequence until the right one is guessed. The difference between <tt>serial</tt> and <tt>optimized</tt> is in the order of the attempts: while the former just tries all values following their ASCII value, the latter starts with the most common values. The exact order is specified with the <tt><ref id="language_map_" name="language_map"></tt> parameter, and such order is modified in real-time, adapting to the actual frequency of characters being extracted, if the <tt><ref id="language_map_adaptive_" name="language_map_adaptive"></tt> parameter is set to to <tt>yes</tt>.
+
+<p><bf>DNS-based extraction</bf><label id="dnsdata_">
+<p>
+You have control over a DNS domain or subdomain? You can get DNS servers to shoot "Type A" requests to your box? Does the remote DBMS resolve external names? If so, you can forget about that sluggish inference-based extraction and start pulling data almost at light speed (well, comparatively speaking). Make sure you run sqlninja as root, set <tt><ref id="domain_" name="domain"></tt> in the configuration file, and you are ready to go.
+
+<p><bf>Additional info</bf>
+<p>
+By default, sqlninja stores all extracted information in a local SQLite database, whose filename is specified via command line with the <tt>-s</tt> parameter. The default name is <tt>session.db</tt>. For all other parameters and details, see <ref id="dataextractionoptions_" name="data extraction options">.
+
+
+<sect1>Other attacks<label id="other_">
+<p>
+<p>Quite often, SQL Server does not run as SYSTEM but as a less-privileged user (very often "Network Service"). 
+This creates limitations in what the attacker can do (e.g.: extract password hashes). It also creates problems with the VNC Injection, 
+causing a black screen to be returned. However, with sqlninja we can try to escalate privileges to SYSTEM, using two different attacks techniques.
+<p>
+<sect2>CVE-2010-0232<label id="kitrap0d_">
+<p>
+If SQL Server runs as a low-privileged user, and the machine is not patched against CVE-2010-0232, we can try to elevate its privileges to SYSTEM. Sqlninja ships with a version of the original exploit by Tavis Ormandy that has been specifically customized: while the original exploit spawns a DOS prompt, our version looks for the sqlservr.exe process and forces it to run as SYSTEM.
+In order to launch the attack, the following steps are required:
+<enum>
+<item><ref id="upload_" name="Upload"> <tt>vdmallowed.exe</tt> and <tt>vdmexploit.dll</tt>, which are available in the <tt>apps</tt> directory in executable format and in the <tt>scripts</tt> directory (in debug script format)
+<item>Using the <ref id="sqlcmd_" name="sqlcmd attack mode">, run the following command:
+
+<tt>%TEMP%\vdmallowed sql</tt>
+
+<item>If the attack was successful, <ref id="finger_" name="fingerprint mode"> should tell you that SQL Server is now running as SYSTEM
+</enum>
+
+<sect2>Token kidnapping<label id="token_">
+<p>
+On Windows 2003 we can also attempt to escalate our privileges using token kidnapping, a technique researched by <url name="Cesar Cerrudo" url="http://www.argeniss.com/research/TokenKidnapping.pdf">. 
+As a proof of concept he developed <url name="churrasco.exe" url="http://www.argeniss.com/research/Churrasco.zip">, 
+which is included in the sqlninja tarball in a slightly modified version. If you need to escalate to SYSTEM simply upload it 
+to the remote server using the <tt>upload</tt> mode and then set the <ref id="usechurrasco_" name="usechurrasco"> option to <tt>yes</tt>: all commands will then be wrapped with churrasco.exe. Keep in mind that this will not work if the remote DBMS has been patched 
+against the attack, but you can check whether things are working using the <ref id="finger_" name="fingerprint mode"> while this option
+is enabled.
+<p>
+Important: be sure to use the modified version of churrasco (yes, the one in the sqlninja tarball), or things are likely to break. You can see the differences in the C source in the <tt>sources</tt> directory, but basically they boil down to:
+<enum>
+<item>No verbose output unless the <tt>-d</tt> option is used. Verbose output would interfere with option 5 of the fingerprint mode, which uses a temporary table to store the results of a churrasco.exe execution.
+<item><tt>CreateProcessAsUser()</tt> is called passing the original (unprivileged) user's %TEMP% directory as the <tt>lpCurrentDirectory</tt> parameter, which is where our executables (e.g.: netcat) are uploaded (and not in the %TEMP% directory of SYSTEM).
+</enum>
+<sect>Configuration file<label id="conf_">
+<p>
+The configuration file (default: <tt>sqlninja.conf</tt>) controls most of sqlninja behaviour. All options are in the form:
+<tscreen>
+option_name = option_value
+</tscreen>
+The only exception is <tt>httprequest</tt>, which defines the HTTP request and the injection point and which spans multiple lines (see below).
+<p>
+Options can be roughly divided into the following categories:
+<itemize>
+<item><ref id="basic_" name="Basic">: used to configure the attack
+<item><ref id="dataextractionoptions_" name="Data extraction">: used to configure the data extraction mode
+<item><ref id="advanced_" name="Advanced">: used for additional fine-tuning
+</itemize>
+
+Options are, more often than not, case sensitive (e.g.: URL values). The same option can be used multiple times: sqlninja does not care and will simply use the last declaration, overriding the previous ones.
+Comments are allowed anywhere except between <tt>--httprequest_start--</tt> and <tt>--httprequest_end--</tt> (see below), and they are prepended by the '#' character. A quick recap of what follows can also be found in <tt>sqlninja.conf.example</tt>.
+
+<sect1>Basic options<label id="basic_">
+<sect2>httprequest
+<p>
+Starting from version 0.2.6, sqlninja uses a new way to configure the HTTP request and the relative injection string. Instead of separate parameters for host, port, page, HTTP method, exploitation string and additional headers, the whole HTTP request is specified at once, with a marker (by default <tt>__SQL2INJECT__</tt>) that indicates where the SQL commands need to be injected.
+This simplifies things a lot, and most importantly allows complete freedom in where the injection vector can be: now you are not limited to a GET or POST parameter, but you can inject wherever you need (e.g.: in a cookie).
+Sqlninja will consider as the HTTP request everything that is included between the lines <tt>--httprequest_start--</tt> and <tt>--httprequest_end--</tt>.
+
+In general, the following elements must be included:
+<itemize>
+<item>The HTTP Method (usually POST or GET)
+<item>The full URL to the resources, including <tt>http://</tt> or <tt>https://</tt>
+<item>The port, if not standard (e.g.: <tt>http://www.victim.com:8080</tt>)
+<item>The HTTP version
+<item>All necessary headers
+<item>The body after an empty line, if the request uses POST
+</itemize>
+
+In general, the best strategy is just to use a proxy (e.g. Burpsuite) to intercept the request that triggers the SQL Injection and copy it into <tt>sqlninja.conf</tt>
+
+For instance, a GET-based injection over plaintext HTTP will look like the following:
+<tscreen><verb>
+--httprequest_start--
+GET http://www.victim.com/page.asp?string_param=aaa';__SQL2INJECT__&amp;other_param=blah HTTP/1.1
+Host: www.victim.com
+User-Agent: Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.7.13) Gecko/20060418 Firefox/1.0.8
+Accept: text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*
+Accept-Language: en-us,en;q=0.7,it;q=0.3
+Accept-Charset: ISO-8859-15,utf-8;q=0.7,*;q=0.7
+Connection: close
+--httprequest_end-- 
+</verb></tscreen>
+
+Alternatively, a POST-based injection over HTTPS will probably look like the following (note the Content-Type header and the empty line between headers and body):
+<tscreen><verb>
+--httprequest_start--
+POST https://www.victim.com/page.asp HTTP/1.0
+Host: www.victim.com
+User-Agent: Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.7.13) Gecko/20060418 Firefox/1.0.8
+Accept: text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*
+Accept-Language: en-us,en;q=0.7,it;q=0.3
+Accept-Charset: ISO-8859-15,utf-8;q=0.7,*;q=0.7
+Content-Type: application/x-www-form-urlencoded
+Cookie: ASPSESSIONID=xxxxxxxxxxxxxxxxxxxx
+Connection: close</verb></tscreen>
+
+<tscreen><verb>
+numeric_param=12;__SQL2INJECT__
+--httprequest_end-- 
+</verb></tscreen>
+Note that the Content-Length header is not included: sqlninja will calculate the appropriate value and add the header automatically.
+
+Finally, a cookie-based injection will look like the following:
+<tscreen><verb>
+--httprequest_start--
+GET http://www.victim.com:8080/page.asp?param1=aaa&amp;param2=blah HTTP/1.0
+Host: www.victim.com
+User-Agent: Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.7.13) Gecko/20060418 Firefox/1.0.8
+Accept: text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*
+Accept-Language: en-us,en;q=0.7,it;q=0.3
+Accept-Charset: ISO-8859-15,utf-8;q=0.7,*;q=0.7
+Cookie: ASPSESSIONID=xxxxx'%3B__SQL2INJECT__
+Connection: close
+--httprequest_end-- 
+</verb></tscreen>
+
+Note how the semicolon after the apostrophe has been encoded to %3B: this is because otherwise the server would parse the semicolon as a separator between different cookies.
+
+Before the <tt>__SQL2INJECT__</tt> marker, you need to include everything that is needed to close the original query and start a new one, such as the vulnerable parameter and the character sequence that allows us to start injecting commands. This usually means, at least:
+<enum>
+<item>the vulnerable parameter (name+value)
+<item>a single quote (if the parameter is a string)
+<item>a semicolon (to end the original query)
+</enum>
+It must also include everything that is needed to properly close the original query, as an appropriate number of closing brackets. For instance, if want to inject the following TSQL command:
+<tscreen>
+param1=1&amp;param2=x'));exec+master..xp_cmdshell+'dir+c:'
+</tscreen>
+the HTTP request in the configuration file should contain the following:
+<tscreen>
+param1=1&amp;param2=x'));__SQL2INJECT__
+</tscreen> 
+
+Important things to remember:
+<itemize>
+<item>In general, a good technique is to replicate as closely as possible the HTTP request that you used to originally detect the SQL Injection flaw (with a web browser or another tool), as in some edge cases a slightly different header can make a big difference. The only suggested and usually safe modification is to use HTTP/1.0 in order to avoid problems with connections remaining open
+<item>In order to give you full power and flexibility in crafting your exploit, sqlninja does not try to meddle in any way: this means that it will not modify your HTTP request (apart from the code to inject where the marker is, obviously), but it also means that it will not try to correct your syntax, so make sure your HTTP request is correct (including all needed URL-encoding). For more information, see RFC 1945, RFC 2068 and RFC 2616.
+<item>Sometimes you might also need to add some more SQL code after the injected query (and therefore after the marker). Usually this is not needed, since sqlninja simply appends two hyphens and comments out the remainder of the original query, but there are some (rare) cases when you need to append additional SQL code for the batched queries to work correctly. In this case, don't forget to also set <tt>appendcomment = no</tt>, otherwise the two hyphens will be appended and the SQL code specified here will be considered a comment
+<item>If you are injecting in a cookie, and you need a semicolon to close the original query, remember to encode it (%3B), otherwise it will be parsed as the end of the cookie value
+<item>Do not leave spaces at the beginning of each line!
+<item>Do not leave comment lines! They would be parsed as part of the request!
+<item>Finally, if you don't specify the port to connect to, sqlninja will assume 80 for HTTP and 443 for HTTPS
+</itemize>
+
+<sect2>proxyhost<label id="proxyhost_">
+<p>An HTTP proxy to connect to the target host, if needed. For example:
+<tscreen>
+proxyhost = 192.168.1.233
+</tscreen>
+
+<sect2>proxyport<label id="proxyport_">
+<p>The port of the HTTP proxy that we connect to. Default is 8080. For example:
+<tscreen>
+proxyport = 3128
+</tscreen>
+
+<sect2>domain<label id="domain_">
+<p>The attacker's controlled domain or subdomain to be used with the dnstunnel mode and DNS-based data extraction mode. The IP address from which sqlninja is launched must be the authoritative DNS server for
+ that domain. For example:
+ <tscreen>
+ domain = sqlninja.net
+ </tscreen>
+
+<sect2>msfpath<label id="msfpath_">
+<p>The absolute path to Metasploit executables (<tt>msfpayload</tt> and <tt>msfcli</tt>). You don't need this if they are already in your default path. For example:
+<tscreen>
+msfpath = /home/icesurfer/tools/framework-3.1
+</tscreen>
+
+<sect2>evasion<label id="evasion_">
+<p>Sqlninja can use a few evasion techniques, in order to confuse and bypass signature-based IPS/IDS. Currently, four techniques are implemented, which can be freely combined together:
+<enum>
+<item>Query hex-encoding: the query is hex-encoded before being run
+<item>Comments as separators: all spaces are substituted by the string <tt>/**/</tt>
+<item>Random case
+<item>Random URI encoding 
+</enum>
+
+The first technique is particularly useful. For instance, if we want to inject the following command:
+<tscreen>
+exec master..xp_cmdshell 'cmd /C ping 127.0.0.1'
+</tscreen>
+The actual query will become:
+<tscreen>
+declare @a varchar(8000) set @a=0x65786563206d61737465722e2e78705f636d647368656c6c2027636d64202f432070696e67203132372e302e302e31273b exec (@a)
+</tscreen>
+A much longer string, but notice the following:
+<itemize>
+<item>No SQL commands except DECLARE and EXEC, so bye-bye IPS's looking for xp_cmdshell and the like
+<item>No single quotes either! This evasion technique is therefore extremely useful if you find a vulnerable numeric parameter and single quotes are filtered
+</itemize>
+
+As mentioned, you can combine all the techniques together with the following option:
+<tscreen>
+evasion = 1234
+</tscreen>
+This will generate quite cryptic code, as the following one:
+<tscreen>
+%64ECl%41RE%2F%2A%2A%2F%40%61%2F%2A%2A%2F%76Ar%63%48aR%288000%29%2F%2A%2A%2F%73
+ET%2F%2A%2A%2F%40A%3D%30%586%35786%3563%3206d617%33746%35%372%32e2%457870%35F63
+6d647368%36%35%36%63%36c2%302%37636D%3642%30%32f%34320%37%3069%36%65%36720%331%
+332372E%330%32E3%30%32%45%3312%373b%2F%2A%2A%2FeX%65%43%2F%2A%2A%2F%28%40A%29
+</tscreen>
+As a default, sqlninja sets <tt>evasion</tt> to zero, and no evasion technique will be used.
+<p>
+<bf>Important:</bf> avoid using unnecessary obfuscation if you are using GET requests, as this might lead to URLs that are too long and that are not successfully parsed by the web server!
+
+<sect2>msfencoder<label id="msfencoder_">
+<p>The encoder to use for the Metasploit stager. If not specified, no encoding is performed. However, a good encoder is always recommended. For example:
+<tscreen>
+msfencoder = x86/shikata_ga_nai
+</tscreen>
+
+<sect2>upload_method<label id="uploadmethod_">
+<p>The method to use to upload binary files. Possible values are <tt>debug</tt> or <tt>vbscript</tt> (default). For example:
+<tscreen>
+upload_method = vbscript
+</tscreen>
+
+
+<sect1>Data extration options<label id="dataextractionoptions_">
+
+<sect2>data_channel<label id="data_channel_">
+<p>The channel to use to extract data. It can be <tt>time</tt> (default) to use a WAITFOR-based extraction channel (very slow, but always works) or <tt>dns</tt> (much faster, but you need to control a domain or subdomain to be resolved to your public IP address. For example:
+<tscreen>
+data_channel = time
+</tscreen>
+
+<sect2>data_extraction<label id="data_extraction_">
+<p>When using time-based extraction, there are three possible extraction methods. When choosing <tt>binary</tt>, sqlninja will perform a binary search, minimizing the number of requests. When choosing <tt>serial</tt>, sqlninja will try all possible values, which will probably be faster (since WAITFOR will be triggered only once) but will leave more entries in the remote logs. When choosing <tt>serial_optimized</tt>, sqlninja will try all possible values, starting from most likely candidates. The default is <tt>serial_optimized</tt>
+
+<sect2>language_map<label id="language_map_">
+<p>If you are using time-based extraction and you have selected <tt>serial_optimized</tt> as your extraction method, you can specify a language map where you can specify the orders of characters that should be tried when extracting data. You can find some pre-defined maps under lib/langs, where included maps for English, French, Italian, German, Spanish and Portuguese. Such maps are based on the letter frequency in the respective languages and include also a whitespace and some common punctuation characters. If you need a custom map, just list the characters in a single line. You don't need to specify all possible characters: the ones not in the map will simply be tried if none of the specified ones is successful. For example:
+<tscreen>
+language_map = lib/langs/en.maps</tscreen>
+
+<sect2>language_map_adaptive<label id="language_map_adaptive_">
+<p>When using a serial-optimized extraction, sqlninja can use an adaptive approach: basically, each character in the language map is given a "weight" and every time a character is successfully extracted by the remote database, the weight of this character in the language map is increased by one. When the weight of the caracter in position N is higher than the weight of the character in position N-1, their places are switched in the map itself, so that the character with the higher weight (which is therefore more frequent) will be tried first when extracting following characters. Values here are either <tt>yes</tt> or <tt>no</tt>, but in general you should always stick to <tt>yes</tt> for better results. For example:
+<tscreen>
+language_map_adaptive = yes
+</tscreen>
+
+<sect2>store_session<label id="store_session_">
+<p>By default, sqlninja stores all extracted information in a local SQLite database, specified via command line (default: session.db). This allows you locally save all extracted data and to retrieve it at a later moment. In general, leave this to <tt>yes</tt>. For instance:
+<tscreen>
+store_session = yes
+</tscreen>
+
+<sect2>sanity_check<label id="sanity_check_">
+<p>When using time-based extraction, network latency can limit the accuracy if extracted data. Sqlninja can check the accuracy of extracted information (currently DBs, users, tables, columns but not rows yet) and retry to extract the same piece of information if a problem is detected. The check involves only one query, is performed at the end of the extraction of a whole string (e.g.: a column name), and uses a WAITFOR that is executed only if the information is incorrect. Therefore, the check has a very limited performance impact. In general, leave this to <tt>yes</tt>. For example:
+<tscreen>
+sanity_check = yes
+</tscreen>
+
+<sect1>Advanced options<label id="advanced_">
+
+<sect2>lhost<label id="lhost_">
+<p>The IP addresses or hostname that the target must try to contact in backscan and revshell mode. That is *your* machine. Of course, if the attack is performed over the Internet, this must be a public address. For example:
+<tscreen>
+lhost = tester.sqlninja.net
+</tscreen>
+
+<sect2>device<label id="device_">
+<p>The device to use for sniffing packets when in backscan mode (default: eth0).
+ For example:
+ <tscreen>
+ device = ppp0
+ </tscreen>
+
+<sect2>filter
+<p>A valid pcap expression to filter incoming packets in backscan mode. By default, when performing such attack, sqlninja listens for packets coming from the IP address of the remote web server and directed to the host specified in <tt>lhost</tt>. This might not work in all cases: for instance, the outbound connections of the DB server could be NATed to an IP address which is different from the IP address of the web server. Therefore, we need to override the default pcap filter with this parameter, for instance indicating the whole public subnet of the target. You only need to specify hosts/networks here, as the protocol details (e.g.: tcp flags) are handled by sqlninja. For example:
+<tscreen>
+filter = src host nat.victim.com
+</tscreen>
+
+<sect2>timeout
+<p>This parameter is used when in backscan mode. It specifies how many seconds to wait for further packets 
+after the web request has completed (default: 5 seconds). This is especially useful when specifying a very large range of ports to scan, because the web request might timeout before netcat has completed. In this case, you should increase this value. For example:
+<tscreen>
+timeout = 30
+</tscreen>
+However, try to avoid very large port ranges: better to split the job in multiple scans.
+
+<sect2>hostnamelength
+<p>Maximum length of FQDN of the fake hostnames that the target will try to resolve in dnstunnel mode. RFCs state that 255 characters is the limit, but I bumped into a few DNS servers that refused names longer than 253. The default value is therefore 250, which should be accepted by every DNS server, and at the same time keep an almost optimal tunnel speed. Minimum value is 40. Maximum is obviously 255.
+For example:
+<tscreen>
+hostnamelength = 250
+</tscreen>
+
+You can also tune this parameter to lower values when you think that very long DNS requests might be spotted. Of course, shorter values mean a slower tunnel. If unsure, leave the default value.
+
+<sect2>msfencodecount<label id="msfencodecount_">
+<p>Number of times that the stager must be encoded. Default is 5. For example:
+<tscreen>
+msfencodecount = 8
+</tscreen>
+
+<sect2>usechurrasco<label id="usechurrasco_">
+<p>This setting is used to escalate privileges through <ref id="token_" name="token kidnapping">. The default of this setting is <tt>no</tt>. For example:
+<tscreen>
+usechurrasco = yes
+</tscreen>
+
+<sect2>resolvedip
+<p>In dnstunnel mode, the IP address that is sent back to each DNS request (since we don't want gethostbyname() to hang). In general, it is advisable to set this to 127.0.0.1 (which is the default), to avoid spurious network traffic generated after the remote DBMS receives a fake DNS response.
+<tscreen>
+resolvedip = 10.255.255.254
+</tscreen>
+
+<sect2>xp_name<label id="xp_name_">
+<p>Name of the extended procedure that executes our commands. The default is obviously <tt>xp_cmdshell</tt>.
+This parameter is used in two different ways, depending on the current attack mode:
+<itemize>
+<item>resurrectxp: <tt>xp_name</tt> contains the name of the extended procedure to create. If you believe that re-enabling xp_cmdshell might be spotted, use another name here (e.g.: <tt>sp_sqlbackup</tt>)
+<item>all other modes: the extended procedure name to use. It goes without saying that it must be the same name previously used with the resurrectxp mode.
+</itemize>
+xp_name can be set to <tt>NULL</tt> to use the inline procedure injection technique (see <ref id="resurrectxp_" name="resurrect_xp"> mode for more details). For example:
+<tscreen>
+xp_name = sp_sqlbackup
+</tscreen>
+
+<sect2>blindtime
+<p>The value for the WAITFOR DELAY calls that are used in fingerprint and bruteforce modes for the 
+inference-based injection. Default value is 5 seconds, but this might be too low for very slow servers and lead to wrong results. If that happens, try increasing this value. On the other hand, if the server response time is very short, you can set a lower value to make things faster (minimum: 3). For example:
+<tscreen>
+blindtime = 4
+</tscreen>
+If you have no clue about what inference-based injection means, enjoy some time in the <ref id="background_" name="background section">.
+
+<sect2>lines_per_request
+<p>With this parameter you can control how many lines of the debug script are uploaded in a single request. A higher value obviously means a faster upload, but it might be risky if you use GET requests, since the URL might become too long. The default here is 10, and the maximum is 30. Example:
+<tscreen>
+lines_per_request = 15
+</tscreen>
+
+<sect2>errorstring
+<p>Sqlninja alerts the user when an HTTP error code is received (e.g.: 500 Server Error), but some applications return a custom page with a 200 OK message. In such cases, it is wise to provide sqlninja with a string that is present in that error page (and only in that page). The parameter value must be put between double quotes. For example:
+<tscreen>
+errorstring = "an error has occurred"
+</tscreen>
+
+<sect2>appendcomment
+<p>By default, sqlninja appends two hyphens to the injected query  in order to comment out any spurious SQL code. This is good and works in approximately 99% of the cases. However, you might want to change this behavior in some very specific scenarios. For example:
+<tscreen>
+appendcomment = yes
+</tscreen>
+Change this setting only if you really know what you are doing.
+
+<sect2>checkdep
+<p>Recent versions of Metasploit automatically disable DEP with the stager before injecting the DLL. However, if for some reason this does not work you can roll back to the old behavior: sqlninja will check the DEP setting on the remote machine and will try to whitelist the Metasploit stager by calling xp_regread. By default this setting is set no <tt>no</tt> but it is perfectly safe to re-enable the check. It will just make things a little slower, and obviously will leave a slightly larger footprint on the remote system. Example:
+<tscreen>
+checkdep = no
+</tscreen>
+
+<sect2>sqlmarker
+<p>You can also override the value of the marker that is used to tell sqlninja where to inject the code (default: <tt>__SQL2INJECT__</tt>). It is extremely unlikely you will ever need to change this.
+<tscreen>
+sqlmarker = SOME_WEIRD_STRING_HERE
+</tscreen>
+
+<sect2>b64decoder
+<p>You can override the name that sqlninja uses for the script used to decode base64 files once they are uploaded. The default is <tt>b64decoder.vbs</tt>. It is extremely unlikely you will ever need to change this. 
+<tscreen>
+b64decoder = somename.vbs
+</tscreen> 
+
+<sect>Other useful information
+<p>
+<itemize>
+<item>Sqlninja is released under the GPLv3. See the LICENSE file for details.
+<item>Netcat is included in the sqlninja package, already in scr format.
+<item>In verbose mode you might get a "Bareword NetPacket::IP::IP_PROTO_UDP not allowed...blah blah" error. You can safely ignore it, as it seems a harmless bug of NetPacket. If you want to get rid of it, set <tt>$proto=17</tt> in UDP.pm.
+<item>All rights for the papers referenced in the <ref id="background_" name="background"> section belong to Next Generation Security Software, now part of <url url="http://www.nccgroup.com" name="NCC Group">. I am hosting them on my website simply because I don't like this manual having dead links, and the originals were constantly moved/deleted.
+<item>Unless you are a beginner, snowboarding on piste is lame.
+</itemize>
+
+<sect1>Credits
+<p>If sqlninja has been useful to you, either because it helped in a penetration test or because you just became a millionaire stealing credit cards from e-commerce sites, be aware that it's also thanks to:
+<itemize>
+<item>julie - for the discussions about DNS tunneling, and a lot more
+<item>David Litchfield and Chris Anley, authors of the papers listed in the <ref id="background_" name="background"> section
+<item>lele - for the SQL sorcery
+<item>pentestmonkey.net - for more SQL sorcery
+<item>sp0nge - for all the discussions and the coding hints
+<item>hobbit - for netcat, of course
+<item>The Metasploit development team - for.... well, obvious
+<item>Cesar Cerrudo - for the token kidnapping attack
+<item>Antonin Foller - for the original custom xp_cmdshell code
+<item>Nmonkey - for a bunch of tips, tricks and feedback, and for letting me steal a bunch of stuff from his <url name="bobcat" url="http://www.northern-monkee.co.uk/pub/bobcat.html"> tool. 
+<item>Tavis Ormandy - for the original KiTrap0d exploit 
+<item>Birillo and cima-asso.it - for taking sqlninja to the top of a 6130m mountain in Ladakh (don't ask) 
+<item>The Spike Riders Team - see you at the snowpark, dudes!
+</itemize>
+Additional credits for {ideas|suggestions|patches|support|alcohol} go to:
+s4tan, Stefano Di Paola, Elliot Kendall, geese, Philippe Schaeffer, Angelo Dell'Aera, WarGame, jussi, bambam, Ross Bushby, Konrad Malewski, Hubert Seiwert, Raul Siles, and a guy from #uncon that prefers to remain anonymous
+
+<sect1>Disclaimer
+<p>Sqlninja is not trivial to setup, so it should be of no use for script kiddies.
+In any case, what you do with this tool is uniquely your business. 
+In order to use it you are supposed to be a professional penetration tester with some written document that authorizes you to punch holes in the network you are attacking.
+If you don't have such authorization, feel free to have fun anyway but be aware that this might get you in trouble with a lot of law enforcement agencies. That means <bf>you</bf>. Not us.
+
+<sect1>Feedback
+<p> If you have some constructive observations or ideas about current or new functionalities, or if you want to report a bug, or if sqlninja was useful in some way, please drop us a line :).
+Also, if you successfully used this tool in a penetration test, and that made your boss win a few more projects that will help him buying a new Porsche or bringing his trophy wife to Vegas, convince him that the hacking community deserves a donation to pay some bills and buy some booze.
+
+<sect1>Wisdom
+<p>Any damn fool can beg up some kind of job; it takes a wise man to make it without working
+	-- Charles Bukowski
+
+<sect1>Authors
+<p>icesurfer - &lt; r00t -at- northernfortress -dot- net &gt;
+<p>nico - &lt; nico -at- leidecker -dot- info &gt;
+</article>
+
