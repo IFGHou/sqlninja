@@ -104,7 +104,6 @@ sub select_database
 	my $db_name = "";
 	do {
 		$db_name = read_from_prompt('','^\d*$');
-		print $db_name;
 		if (($db_name eq "") and !($current_db eq "")) {
 			$db_name = $current_db;
 		} elsif (($db_name > -1) and ($db_name < scalar @{$dbs})) {
@@ -114,7 +113,6 @@ sub select_database
 		}
 	} while ($db_name eq "");
 
-	print $db_name;
 	return $db_name;
 }
 
@@ -360,6 +358,11 @@ sub extract_tables
 		my $query_count = "select count(name) from " . $db_name . "..sysobjects WHERE xtype='U'";
 		# TODO: what if more than 300? Can that happen? (nico)
 		$num_tables_total = extract_number($query_count, 0, 300, 1, "number of tables");
+		if ($num_tables_total == -1) {
+			print "It was not possible to get the number of tables in that database. You might not have permissions to access it.\n";
+			return;
+		}
+
 		session_store_table_num($db_name, $num_tables_total);
 	}
 
@@ -538,7 +541,7 @@ sub extract_rows
 	}
 
 	# Which rows should be extracted?
-	my $number_start = read_from_prompt("Start row? [Def: 1, Max: 1000]\n", '^([\d]+)?$');
+	my $number_start = read_from_prompt("Start row? [Def: 1, Max: 1000]\n", '^\d*$');
 	if ($number_start eq "") {
 		$number_start = 1;
 	}
