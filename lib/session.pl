@@ -51,7 +51,7 @@ sub session_is_enabled {
 
 sub session_is_active {
 	if ($db_h == undef or $session_id == undef) {
-		die("Womething went wrong with the session database\n");
+		die("Something went wrong with the session database\n");
 	}
 
 	return 1;
