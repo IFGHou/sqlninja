@@ -500,7 +500,7 @@ In general, the following elements must be included:
 <item>The full URL to the resources, including <tt>http://</tt> or <tt>https://</tt>
 <item>The port, if not standard (e.g.: <tt>http://www.victim.com:8080</tt>)
 <item>The HTTP version
-<item>All necessary headers
+<item>All necessary headers (excluded <tt>Connection</tt> which is added automatically)
 <item>The body after an empty line, if the request uses POST
 </itemize>
 
@@ -515,7 +515,6 @@ User-Agent: Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.7.13) Gecko/20060418 Fi
 Accept: text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*
 Accept-Language: en-us,en;q=0.7,it;q=0.3
 Accept-Charset: ISO-8859-15,utf-8;q=0.7,*;q=0.7
-Connection: close
 --httprequest_end-- 
 </verb></tscreen>
 
@@ -529,8 +528,7 @@ Accept: text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plai
 Accept-Language: en-us,en;q=0.7,it;q=0.3
 Accept-Charset: ISO-8859-15,utf-8;q=0.7,*;q=0.7
 Content-Type: application/x-www-form-urlencoded
-Cookie: ASPSESSIONID=xxxxxxxxxxxxxxxxxxxx
-Connection: close</verb></tscreen>
+Cookie: ASPSESSIONID=xxxxxxxxxxxxxxxxxxxx</verb></tscreen>
 
 <tscreen><verb>
 numeric_param=12;__SQL2INJECT__
@@ -548,7 +546,6 @@ Accept: text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plai
 Accept-Language: en-us,en;q=0.7,it;q=0.3
 Accept-Charset: ISO-8859-15,utf-8;q=0.7,*;q=0.7
 Cookie: ASPSESSIONID=xxxxx'%3B__SQL2INJECT__
-Connection: close
 --httprequest_end-- 
 </verb></tscreen>
 

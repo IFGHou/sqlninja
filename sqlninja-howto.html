@@ -15,49 +15,15 @@
 <P>
 <H2><A NAME="toc1">1.</A> <A HREF="sqlninja-howto.html#s1">Introduction</A></H2>
 
-<UL>
-<LI><A NAME="toc1.1">1.1</A> <A HREF="sqlninja-howto.html#ss1.1">Requirements</A>
-<LI><A NAME="toc1.2">1.2</A> <A HREF="sqlninja-howto.html#ss1.2">Background</A>
-<LI><A NAME="toc1.3">1.3</A> <A HREF="sqlninja-howto.html#ss1.3">How to use it</A>
-</UL>
 <P>
 <H2><A NAME="toc2">2.</A> <A HREF="sqlninja-howto.html#s2">Attack modes</A></H2>
 
-<UL>
-<LI><A NAME="toc2.1">2.1</A> <A HREF="sqlninja-howto.html#ss2.1">test</A>
-<LI><A NAME="toc2.2">2.2</A> <A HREF="sqlninja-howto.html#ss2.2">fingerprint</A>
-<LI><A NAME="toc2.3">2.3</A> <A HREF="sqlninja-howto.html#ss2.3">bruteforce</A>
-<LI><A NAME="toc2.4">2.4</A> <A HREF="sqlninja-howto.html#ss2.4">escalation</A>
-<LI><A NAME="toc2.5">2.5</A> <A HREF="sqlninja-howto.html#ss2.5">resurrectxp</A>
-<LI><A NAME="toc2.6">2.6</A> <A HREF="sqlninja-howto.html#ss2.6">upload</A>
-<LI><A NAME="toc2.7">2.7</A> <A HREF="sqlninja-howto.html#ss2.7">dirshell</A>
-<LI><A NAME="toc2.8">2.8</A> <A HREF="sqlninja-howto.html#ss2.8">backscan</A>
-<LI><A NAME="toc2.9">2.9</A> <A HREF="sqlninja-howto.html#ss2.9">revshell</A>
-<LI><A NAME="toc2.10">2.10</A> <A HREF="sqlninja-howto.html#ss2.10">icmpshell</A>
-<LI><A NAME="toc2.11">2.11</A> <A HREF="sqlninja-howto.html#ss2.11">dnstunnel</A>
-<LI><A NAME="toc2.12">2.12</A> <A HREF="sqlninja-howto.html#ss2.12">metasploit</A>
-<LI><A NAME="toc2.13">2.13</A> <A HREF="sqlninja-howto.html#ss2.13">sqlcmd</A>
-<LI><A NAME="toc2.14">2.14</A> <A HREF="sqlninja-howto.html#ss2.14">getdata</A>
-<LI><A NAME="toc2.15">2.15</A> <A HREF="sqlninja-howto.html#ss2.15">Other attacks</A>
-</UL>
 <P>
 <H2><A NAME="toc3">3.</A> <A HREF="sqlninja-howto.html#s3">Configuration file</A></H2>
 
-<UL>
-<LI><A NAME="toc3.1">3.1</A> <A HREF="sqlninja-howto.html#ss3.1">Basic options</A>
-<LI><A NAME="toc3.2">3.2</A> <A HREF="sqlninja-howto.html#ss3.2">Data extration options</A>
-<LI><A NAME="toc3.3">3.3</A> <A HREF="sqlninja-howto.html#ss3.3">Advanced options</A>
-</UL>
 <P>
 <H2><A NAME="toc4">4.</A> <A HREF="sqlninja-howto.html#s4">Other useful information</A></H2>
 
-<UL>
-<LI><A NAME="toc4.1">4.1</A> <A HREF="sqlninja-howto.html#ss4.1">Credits</A>
-<LI><A NAME="toc4.2">4.2</A> <A HREF="sqlninja-howto.html#ss4.2">Disclaimer</A>
-<LI><A NAME="toc4.3">4.3</A> <A HREF="sqlninja-howto.html#ss4.3">Feedback</A>
-<LI><A NAME="toc4.4">4.4</A> <A HREF="sqlninja-howto.html#ss4.4">Wisdom</A>
-<LI><A NAME="toc4.5">4.5</A> <A HREF="sqlninja-howto.html#ss4.5">Authors</A>
-</UL>
 
 <HR>
 <H2><A NAME="s1">1.</A> <A HREF="#toc1">Introduction</A></H2>
@@ -87,7 +53,7 @@ As you probably have figured out, sqlninja does not look for SQL injection vulne
 <A HREF="http://sqlninja.sourceforge.net">http://sqlninja.sourceforge.net</A>. The demos refer to a previous version but are still perfectly good to get a better understanding of the tool.</P>
 <P>Read this manual carefully (yes, I mean all of it), as it will explain you what it is all about and how to make your way through all sqlninja options. Yes, I know that it's terribly long and boring, but since sqlninja has a plethora of options to play with (and no shiny green buttons), try to read the whole thing: it will help you to get the most of the tool and will save you a lot of time later.</P>
 
-<H2><A NAME="ss1.1">1.1</A> <A HREF="#toc1.1">Requirements</A>
+<H2><A NAME="ss1.1">1.1 Requirements</A>
 </H2>
 
 <P>Since sqlninja is completely written in Perl, there is not much to install, except Perl itself and the following modules, if missing:
@@ -111,7 +77,7 @@ You will also need the Metasploit Framework 3 on your box to use the metasploit 
 </UL>
 </P>
 
-<H2><A NAME="background_"></A> <A NAME="ss1.2">1.2</A> <A HREF="#toc1.2">Background</A>
+<H2><A NAME="background_"></A> <A NAME="ss1.2">1.2 Background</A>
 </H2>
 
 <P>Sometimes, when you find a SQL Injection vulnerability in a web application which uses SQL Server, it is all 2001 again: you find that your queries are run as 'sa', you verify that xp_cmdshell has not been disabled, then you make the server download netcat (via ftp or tftp) and finally obtain your direct or reverse shell. Most of the time, however, things are different: maybe the firewall filters all inbound/outbound connections, or a reverse shell is only allowed on some obscure service, or xp_cmdshell isn't there, or your queries are executed with low privileges. Or maybe all these things together ;). Sqlninja offers some help in getting the deserved remote shell even in these cases. And if that fails, it can still help you to squeeze some data out of the remote DBMS.</P>
@@ -121,7 +87,7 @@ You will also need the Metasploit Framework 3 on your box to use the metasploit 
 <A HREF="http://www.northernfortress.net/sqlinference.pdf">this</A>. I am also assuming you understand what protocol tunneling is, in particular over ICMP and DNS. If you don't, a good introduction to the concept for DNS is 
 <A HREF="http://dnstunnel.de/">here</A>. </P>
 
-<H2><A NAME="ss1.3">1.3</A> <A HREF="#toc1.3">How to use it</A>
+<H2><A NAME="ss1.3">1.3 How to use it</A>
 </H2>
 
 <P>Sqlninja's behaviour is controlled via the 
@@ -206,7 +172,7 @@ The list with the available modes and their corresponding shortcuts can be retri
 </OL>
 </P>
 
-<H2><A NAME="test_"></A> <A NAME="ss2.1">2.1</A> <A HREF="#toc2.1">test</A>
+<H2><A NAME="test_"></A> <A NAME="ss2.1">2.1 test</A>
 </H2>
 
 <P> 
@@ -216,7 +182,7 @@ The list with the available modes and their corresponding shortcuts can be retri
 </UL>
 
 This mode simply injects a simple <CODE>WAITFOR DELAY</CODE> and checks whether it is successfully executed by the remote server. Use this mode to test whether your configuration file is correct and the injection is working.</P>
-<H2><A NAME="finger_"></A> <A NAME="ss2.2">2.2</A> <A HREF="#toc2.2">fingerprint</A>
+<H2><A NAME="finger_"></A> <A NAME="ss2.2">2.2 fingerprint</A>
 </H2>
 
 <P>
@@ -246,7 +212,7 @@ Using WAITFOR-based blind injection, this mode fingerprints the remote server. T
 </UL>
 </P>
 
-<H2><A NAME="bruteforce_"></A> <A NAME="ss2.3">2.3</A> <A HREF="#toc2.3">bruteforce</A>
+<H2><A NAME="bruteforce_"></A> <A NAME="ss2.3">2.3 bruteforce</A>
 </H2>
 
 <P>
@@ -305,7 +271,7 @@ Cons:
 </UL>
 </P>
 
-<H2><A NAME="escalation_"></A> <A NAME="ss2.4">2.4</A> <A HREF="#toc2.4">escalation</A>
+<H2><A NAME="escalation_"></A> <A NAME="ss2.4">2.4 escalation</A>
 </H2>
 
 <P>
@@ -329,7 +295,7 @@ In the first case, you can just have a couple of pints waiting for the old ODBC 
 
 
 
-<H2><A NAME="resurrectxp_"></A> <A NAME="ss2.5">2.5</A> <A HREF="#toc2.5">resurrectxp</A>
+<H2><A NAME="resurrectxp_"></A> <A NAME="ss2.5">2.5 resurrectxp</A>
 </H2>
 
 <P>
@@ -376,7 +342,7 @@ I hope it is clear. If it is, you should not have any problem in having back you
 <P>Note: the code used by sqlninja for the custom procedure is a slight modification of Antonin Foller's code, that you can find at the address 
 <A HREF="http://www.motobit.com/tips/detpg_cmdshell/">http://www.motobit.com/tips/detpg_cmdshell/</A></P>
 
-<H2><A NAME="upload_"></A> <A NAME="ss2.6">2.6</A> <A HREF="#toc2.6">upload</A>
+<H2><A NAME="upload_"></A> <A NAME="ss2.6">2.6 upload</A>
 </H2>
 
 <P>
@@ -401,7 +367,7 @@ This mode uploads a binary file using only GET or POST HTTP requests to the web 
 <P>If you only want to generate the debug script or the base64 file without uploading it (for instance to use it with some other tool), start the upload mode with the <CODE>-g</CODE> option, and sqlninja will generate the file in the <CODE>/tmp</CODE> directory and exit.  You need to specify the password parameter when you do not have native sysadmin privileges (see 
 <A HREF="#escalation_">escalation mode</A>).</P>
 
-<H2><A NAME="dirshell_"></A> <A NAME="ss2.7">2.7</A> <A HREF="#toc2.7">dirshell</A>
+<H2><A NAME="dirshell_"></A> <A NAME="ss2.7">2.7 dirshell</A>
 </H2>
 
 <P>
@@ -413,7 +379,7 @@ This mode uploads a binary file using only GET or POST HTTP requests to the web 
 Use this method when the remote DB Server is directly reachable on some TCP or UDP port. Sqlninja asks for the remote port, the protocol, tells the DB server to bind a command prompt to such port and then starts the connection. Of course, netcat must have been uploaded on the remote server. The password parameter is to be used when we do not have native sysadmin privileges (see 
 <A HREF="#escalation_">escalation mode</A>).</P>
 
-<H2><A NAME="backscan_"></A> <A NAME="ss2.8">2.8</A> <A HREF="#toc2.8">backscan</A>
+<H2><A NAME="backscan_"></A> <A NAME="ss2.8">2.8 backscan</A>
 </H2>
 
 <P>
@@ -434,7 +400,7 @@ The password parameter is to be used when
 we do not have native sysadmin privileges (see 
 <A HREF="#escalation_">escalation</A>). In order to use this mode, netcat must have been uploaded first, and since pcap libraries need to be used you also need to be root.</P>
 
-<H2><A NAME="revshell_"></A> <A NAME="ss2.9">2.9</A> <A HREF="#toc2.9">revshell</A>
+<H2><A NAME="revshell_"></A> <A NAME="ss2.9">2.9 revshell</A>
 </H2>
 
 <P>
@@ -447,7 +413,7 @@ If a direct shell is not possible but backscan mode found an open port from the 
 <A HREF="#lhost_">lhost parameter</A>). Of course, netcat must have been uploaded on the remote server. As usual, the password parameter is to be used when we do not have native sysadmin privileges (see 
 <A HREF="#escalation_">escalation mode</A>).</P>
 
-<H2><A NAME="icmpshell_"></A> <A NAME="ss2.10">2.10</A> <A HREF="#toc2.10">icmpshell</A>
+<H2><A NAME="icmpshell_"></A> <A NAME="ss2.10">2.10 icmpshell</A>
 </H2>
 
 <P>
@@ -468,7 +434,7 @@ When no direct or reverse shell are allowed by the firewall, but the remote DBMS
 <B>Important:</B> make sure that your box is configured to <B>not</B> respond to ICMP Echo requests. For instance, on Linux the following command will do the trick:</P>
 <P><CODE>sysctl -w net.ipv4.icmp_echo_ignore_all=1</CODE></P>
 
-<H2><A NAME="dnstunnel_"></A> <A NAME="ss2.11">2.11</A> <A HREF="#toc2.11">dnstunnel</A>
+<H2><A NAME="dnstunnel_"></A> <A NAME="ss2.11">2.11 dnstunnel</A>
 </H2>
 
 <P>
@@ -501,7 +467,7 @@ If both conditions are met,
 <A HREF="http://www.mingw.org">Msys</A>. As always, the password parameter is to be used when we do not have native sysadmin privileges (see 
 <A HREF="#escalation_">escalation mode</A>).</P>
 
-<H2><A NAME="metasploit_"></A> <A NAME="ss2.12">2.12</A> <A HREF="#toc2.12">metasploit</A>
+<H2><A NAME="metasploit_"></A> <A NAME="ss2.12">2.12 metasploit</A>
 </H2>
 
 <P>
@@ -523,7 +489,7 @@ Not happy with a simple DOS prompt? Want to impress your friends with a full GUI
 <P>You can watch a flash demo of this attack on the sqlninja website.</P>
 <P>Of course, in order to use this attack mode you need to have Metasploit3 available on your box. If Metasploit executables (namely <CODE>msfpayload</CODE>, <CODE>msfcli</CODE> and <CODE>msfencode</CODE>) are not in your path, you can specify their absolute location in the configuration file. Also, if you use the VNC mode, be sure to have a VNC client installed.</P>
 
-<H2><A NAME="sqlcmd_"></A> <A NAME="ss2.13">2.13</A> <A HREF="#toc2.13">sqlcmd</A>
+<H2><A NAME="sqlcmd_"></A> <A NAME="ss2.13">2.13 sqlcmd</A>
 </H2>
 
 <P>
@@ -551,7 +517,7 @@ echo You have been owned by sqlninja > c:\sqlninja.txt
 </CODE></BLOCKQUOTE>
 </P>
 
-<H2><A NAME="getdata_"></A> <A NAME="ss2.14">2.14</A> <A HREF="#toc2.14">getdata</A>
+<H2><A NAME="getdata_"></A> <A NAME="ss2.14">2.14 getdata</A>
 </H2>
 
 <P>
@@ -590,7 +556,7 @@ With that out of the way, let's get down to business: this module is 100% intera
 <A HREF="#dataextractionoptions_">data extraction options</A>.</P>
 
 
-<H2><A NAME="other_"></A> <A NAME="ss2.15">2.15</A> <A HREF="#toc2.15">Other attacks</A>
+<H2><A NAME="other_"></A> <A NAME="ss2.15">2.15 Other attacks</A>
 </H2>
 
 
@@ -654,7 +620,7 @@ The only exception is <CODE>httprequest</CODE>, which defines the HTTP request a
 <P>Options are, more often than not, case sensitive (e.g.: URL values). The same option can be used multiple times: sqlninja does not care and will simply use the last declaration, overriding the previous ones.
 Comments are allowed anywhere except between <CODE>--httprequest_start--</CODE> and <CODE>--httprequest_end--</CODE> (see below), and they are prepended by the '#' character. A quick recap of what follows can also be found in <CODE>sqlninja.conf.example</CODE>.</P>
 
-<H2><A NAME="basic_"></A> <A NAME="ss3.1">3.1</A> <A HREF="#toc3.1">Basic options</A>
+<H2><A NAME="basic_"></A> <A NAME="ss3.1">3.1 Basic options</A>
 </H2>
 
 <H3>httprequest</H3>
@@ -668,7 +634,7 @@ Sqlninja will consider as the HTTP request everything that is included between t
 <LI>The full URL to the resources, including <CODE>http://</CODE> or <CODE>https://</CODE></LI>
 <LI>The port, if not standard (e.g.: <CODE>http://www.victim.com:8080</CODE>)</LI>
 <LI>The HTTP version</LI>
-<LI>All necessary headers</LI>
+<LI>All necessary headers (excluded <CODE>Connection</CODE> which is added automatically)</LI>
 <LI>The body after an empty line, if the request uses POST</LI>
 </UL>
 </P>
@@ -683,7 +649,6 @@ User-Agent: Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.7.13) Gecko/20060418 Fi
 Accept: text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*
 Accept-Language: en-us,en;q=0.7,it;q=0.3
 Accept-Charset: ISO-8859-15,utf-8;q=0.7,*;q=0.7
-Connection: close
 --httprequest_end-- 
 </PRE>
 </CODE></BLOCKQUOTE>
@@ -700,7 +665,6 @@ Accept-Language: en-us,en;q=0.7,it;q=0.3
 Accept-Charset: ISO-8859-15,utf-8;q=0.7,*;q=0.7
 Content-Type: application/x-www-form-urlencoded
 Cookie: ASPSESSIONID=xxxxxxxxxxxxxxxxxxxx
-Connection: close
 </PRE>
 </CODE></BLOCKQUOTE>
 </P>
@@ -724,7 +688,6 @@ Accept: text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plai
 Accept-Language: en-us,en;q=0.7,it;q=0.3
 Accept-Charset: ISO-8859-15,utf-8;q=0.7,*;q=0.7
 Cookie: ASPSESSIONID=xxxxx'%3B__SQL2INJECT__
-Connection: close
 --httprequest_end-- 
 </PRE>
 </CODE></BLOCKQUOTE>
@@ -851,7 +814,7 @@ upload_method = vbscript
 </P>
 
 
-<H2><A NAME="dataextractionoptions_"></A> <A NAME="ss3.2">3.2</A> <A HREF="#toc3.2">Data extration options</A>
+<H2><A NAME="dataextractionoptions_"></A> <A NAME="ss3.2">3.2 Data extration options</A>
 </H2>
 
 <H3><A NAME="data_channel_"></A> data_channel</H3>
@@ -898,7 +861,7 @@ sanity_check = yes
 </CODE></BLOCKQUOTE>
 </P>
 
-<H2><A NAME="advanced_"></A> <A NAME="ss3.3">3.3</A> <A HREF="#toc3.3">Advanced options</A>
+<H2><A NAME="advanced_"></A> <A NAME="ss3.3">3.3 Advanced options</A>
 </H2>
 
 <H3><A NAME="lhost_"></A> lhost</H3>
@@ -1061,7 +1024,7 @@ b64decoder = somename.vbs
 </UL>
 </P>
 
-<H2><A NAME="ss4.1">4.1</A> <A HREF="#toc4.1">Credits</A>
+<H2><A NAME="ss4.1">4.1 Credits</A>
 </H2>
 
 <P>If sqlninja has been useful to you, either because it helped in a penetration test or because you just became a millionaire stealing credit cards from e-commerce sites, be aware that it's also thanks to:
@@ -1086,7 +1049,7 @@ b64decoder = somename.vbs
 Additional credits for {ideas|suggestions|patches|support|alcohol} go to:
 s4tan, Stefano Di Paola, Elliot Kendall, geese, Philippe Schaeffer, Angelo Dell'Aera, WarGame, jussi, bambam, Ross Bushby, Konrad Malewski, Hubert Seiwert, Raul Siles, and a guy from #uncon that prefers to remain anonymous</P>
 
-<H2><A NAME="ss4.2">4.2</A> <A HREF="#toc4.2">Disclaimer</A>
+<H2><A NAME="ss4.2">4.2 Disclaimer</A>
 </H2>
 
 <P>Sqlninja is not trivial to setup, so it should be of no use for script kiddies.
@@ -1094,19 +1057,19 @@ In any case, what you do with this tool is uniquely your business.
 In order to use it you are supposed to be a professional penetration tester with some written document that authorizes you to punch holes in the network you are attacking.
 If you don't have such authorization, feel free to have fun anyway but be aware that this might get you in trouble with a lot of law enforcement agencies. That means <B>you</B>. Not us.</P>
 
-<H2><A NAME="ss4.3">4.3</A> <A HREF="#toc4.3">Feedback</A>
+<H2><A NAME="ss4.3">4.3 Feedback</A>
 </H2>
 
 <P> If you have some constructive observations or ideas about current or new functionalities, or if you want to report a bug, or if sqlninja was useful in some way, please drop us a line :).
 Also, if you successfully used this tool in a penetration test, and that made your boss win a few more projects that will help him buying a new Porsche or bringing his trophy wife to Vegas, convince him that the hacking community deserves a donation to pay some bills and buy some booze.</P>
 
-<H2><A NAME="ss4.4">4.4</A> <A HREF="#toc4.4">Wisdom</A>
+<H2><A NAME="ss4.4">4.4 Wisdom</A>
 </H2>
 
 <P>Any damn fool can beg up some kind of job; it takes a wise man to make it without working
 -- Charles Bukowski</P>
 
-<H2><A NAME="ss4.5">4.5</A> <A HREF="#toc4.5">Authors</A>
+<H2><A NAME="ss4.5">4.5 Authors</A>
 </H2>
 
 <P>icesurfer - &lt; r00t -at- northernfortress -dot- net &gt;</P>

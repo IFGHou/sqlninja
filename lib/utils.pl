@@ -1,5 +1,5 @@
 # This file is part of sqlninja
-# Copyright (C) 2006-2013
+# Copyright (C) 2006-2014
 # http://sqlninja.sourceforge.net
 # icesurfer <r00t@northernfortress.net>
 # nico <nico@leidecker.info>
@@ -112,10 +112,13 @@ sub parsefile
 			}
 			$conf->{'httprequest'} = $conf->{'httprequest'}.$line;
 			$line = <FILE>;
-			while ($line !~ m/^--httprequest_end--/) {
-				
+			while ($line !~ m/^--httprequest_end--/) {	
 				if ($line =~ m/^Host:\s+(\S+)/) {
 					$conf->{'vhost'} = $1;
+				}
+				if ($line =~ m/^Connection:/i) {
+					$line = <FILE>;
+					next;
 				}
 				if (($conf->{'method'} eq "POST") and ($line =~ m/^\s*$/)) {
 					$conf->{'httprequest'} = $conf->{'httprequest'}."Content-Length: __CONTENT_LENGTH__\n\n";
@@ -127,6 +130,7 @@ sub parsefile
 				}
 				$line = <FILE>;
 			}
+			$conf->{'httprequest'} = $conf->{'httprequest'}."Connection: close\n";
 		}
 		# device to sniff in backscan mode
 		elsif ($confline =~ m/^device=(\S+)/) {
