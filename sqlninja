@@ -97,6 +97,8 @@ $conf->{'appendcomment'} = "--";
 $conf->{'msfpath'} = "";
 $conf->{'msfencoder'} = "";
 $conf->{'msfencodecount'} = 5;
+$conf->{'msfclient'} = "msfconsole";
+$conf->{'msfserverdelay'} = 10;
 $conf->{'lines_per_req'} = 10; # script lines to upload with each request
 $conf->{'churrasco'} = 0;
 $conf->{'checkdep'} = "no";
@@ -397,6 +399,6 @@ sub birthday_alert
 sub banner()
 {
 	print("Sqlninja rel. ".$conf->{'RELEASE'}." <http://sqlninja.sf.net>\n");
-	print("(C) 2006-2013 icesurfer & nico\n");	
+	print("(C) 2006-2014 icesurfer & nico\n");	
 }
 

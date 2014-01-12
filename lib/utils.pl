@@ -248,6 +248,20 @@ sub parsefile
 						$conf->{'msfencodecount'}." times\n");
 			}
 		}
+		# mscli or msfconsole
+		elsif ($confline =~ m/^msfclient=(\S+)$/) {
+			if ($1 eq "msfcli") {
+				$conf->{'msfclient'} = $1;
+				print_verbose("  - msf client: ".$conf->{'msfclient'}."\n");
+			}
+		}
+		# server's side delay
+		elsif ($confline =~ m/^msfserverdelay=(\d+)$/) {
+			if (($1 >= 5) and ($1 <= 59)) {
+				$conf->{'msfserverdelay'} = $1;
+				print_verbose("  - msf server delay: ".$conf->{'msfserverdelay'}."\n");
+			}
+		}
 		# whether to handle DEP via xp_regwrite
 		elsif ($confline =~ m/^checkdep=(\S+)$/) {
 			if ($1 eq "yes") {
@@ -318,7 +332,6 @@ sub parsefile
 			}
 			print_verbose( "  - allowing session refresh\n"); 
 		}
-
 	}
 	close FILE;
 	if ($conf->{'httprequest'} eq "") {
