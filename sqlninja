@@ -29,6 +29,7 @@
 use strict;
 use Config;
 use IO::Socket;
+use IO::Socket::SSL;
 use IO::Handle;
 use Getopt::Std;
 use Fcntl;
@@ -351,7 +352,6 @@ sub check_dependencies {
 			"NetPacket-TCP"            => "NetPacket::TCP",
 			"NetPacket-UDP"            => "NetPacket::UDP",
 			"NetPacket-ICMP"	   => "NetPacket::ICMP",
-			"IO-Socket-SSL"            => "IO::Socket::SSL",
 			"Net-Pcap"                 => "Net::Pcap",
 			"Net-RawIP"		   => "Net::RawIP",
 			"Net-DNS-Nameserver"	   => "Net::DNS::Nameserver",
@@ -379,6 +379,11 @@ sub check_dependencies {
 			print $@;
 		}
 	}
+	IO::Socket::SSL::set_ctx_defaults( 
+		SSL_verifycn_scheme => 'www', 
+		SSL_verify_mode => 0,
+	);
+
 }
 
 sub birthday_alert

