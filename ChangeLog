@@ -4,6 +4,8 @@ sqlninja changelog
 Version 0.2.999
 + Fixed keep-alive bug
 
++ Added support for powershell
+
 Version 0.2.999-alpha1
 + Added data extraction module
 

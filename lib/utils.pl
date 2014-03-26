@@ -47,6 +47,11 @@ sub parsefile
 			print_verbose("  - custom error page string: \"".$conf->{'errorstring'}."\"\n");
 			next;
 		}
+		#ps1params
+		elsif ($confline =~ m/\s*ps1params\s*=\s*(.+)\s*/) {
+			$conf->{'ps1params'} = $1;
+			print_verbose("  - ps1 parameters: ".$conf->{'ps1params'}."\n");
+		}
 		# tcpdump filter
 		elsif ($confline =~ m/\s*filter\s*=\s*(.+)\s*/) {
 			$conf->{'filterconf'} = $1;

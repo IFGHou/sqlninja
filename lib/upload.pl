@@ -596,10 +596,10 @@ sub makebase64 {
 sub upload_decoder
 {
 	# Check if the decoder is already present
-	print_verbose("[v] Checking whether ".$conf->{'vbsdecoder'}." is there.... \n");
+	print_verbose("Checking whether ".$conf->{'vbsdecoder'}." is there.... \n");
 	my $present = checkfile("".$conf->{'uploaddir'}."\\".$conf->{'vbsdecoder'});
 	if ($present == 1) {
-		print_verbose("[v] It is.\n");
+		print_verbose("It is.\n");
 		return;
 	}
 	# We delete any previous decoder, in case the previous check was wrong
