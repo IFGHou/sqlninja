@@ -1,5 +1,5 @@
 # This file is part of sqlninja
-# Copyright (C) 2006-2013
+# Copyright (C) 2006-2014
 # http://sqlninja.sourceforge.net
 # icesurfer <r00t@northernfortress.net>
 # nico <nico@leidecker.info>
